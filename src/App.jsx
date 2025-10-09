@@ -61,7 +61,13 @@ import {
     Droplet,
     BarChart3,
     PieChart,
-    Activity
+    Activity,
+    Image,
+    FileText as FileTextIcon,
+    Paperclip,
+    Eye,
+    Award,
+    TrendingDown
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
@@ -1106,6 +1112,7 @@ const HistoryPage = ({ executions, routines }) => {
     const [filterCategory, setFilterCategory] = useState('');
     const [filterRoutine, setFilterRoutine] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedImage, setSelectedImage] = useState(null);
 
     const routinesMap = useMemo(() => {
         return routines.reduce((acc, routine) => {
@@ -1269,15 +1276,34 @@ const HistoryPage = ({ executions, routines }) => {
                         <Card key={exec.id}>
                             <div className="flex flex-col md:flex-row gap-4">
                                 {exec.fotoUrl && (
-                                    <div className="w-full md:w-32 h-32 flex-shrink-0">
-                                      <a href={exec.fotoUrl} target="_blank" rel="noopener noreferrer">
-                                        <img src={exec.fotoUrl} alt="Evidência" className="w-full h-full object-cover rounded-lg" />
-                                      </a>
+                                    <div className="w-full md:w-32 h-32 flex-shrink-0 relative group">
+                                        <img 
+                                            src={exec.fotoUrl} 
+                                            alt="Evidência" 
+                                            className="w-full h-full object-cover rounded-lg cursor-pointer"
+                                            onClick={() => setSelectedImage(exec.fotoUrl)}
+                                        />
+                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all rounded-lg flex items-center justify-center">
+                                            <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                        <div className="absolute top-1 right-1 bg-blue-500 text-white p-1 rounded-full">
+                                            <Image className="w-3 h-3" />
+                                        </div>
                                     </div>
                                 )}
                                 <div className="flex-1">
-                                    <h3 className="font-bold text-lg">{routine.nome}</h3>
-                                    <p className="text-sm text-gray-500 mb-2">{routine.categoria}</p>
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <h3 className="font-bold text-lg">{routine.nome}</h3>
+                                            <p className="text-sm text-gray-500 mb-2">{routine.categoria}</p>
+                                        </div>
+                                        {exec.fotoUrl && (
+                                            <span className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">
+                                                <Paperclip className="w-3 h-3" />
+                                                Anexo
+                                            </span>
+                                        )}
+                                    </div>
                                     <p className="text-gray-700 text-sm mb-3">"{exec.observacao || 'Nenhuma observação.'}"</p>
                                     <div className="text-xs text-gray-500">
                                         <p><strong>Executado por:</strong> {exec.responsavelNome}</p>
@@ -1293,6 +1319,39 @@ const HistoryPage = ({ executions, routines }) => {
                     </Card>
                 )}
             </div>
+
+            {/* Modal de Visualização de Imagem */}
+            {selectedImage && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+                    onClick={() => setSelectedImage(null)}
+                >
+                    <div className="relative max-w-4xl max-h-full">
+                        <button
+                            onClick={() => setSelectedImage(null)}
+                            className="absolute -top-10 right-0 text-white hover:text-gray-300"
+                        >
+                            <X className="w-8 h-8" />
+                        </button>
+                        <img 
+                            src={selectedImage} 
+                            alt="Evidência ampliada" 
+                            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                        <a
+                            href={selectedImage}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Download className="w-4 h-4" />
+                            Abrir Original
+                        </a>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -2114,6 +2173,273 @@ const AdminPage = ({ routines, users }) => {
     );
 };
 
+// --- Página de Relatórios ---
+const ReportsPage = ({ executions, routines, users }) => {
+    const [selectedPeriod, setSelectedPeriod] = useState('month');
+    
+    const stats = useMemo(() => {
+        const now = new Date();
+        let startDate;
+        
+        switch(selectedPeriod) {
+            case 'week':
+                startDate = new Date(now);
+                startDate.setDate(now.getDate() - 7);
+                break;
+            case 'month':
+                startDate = new Date(now);
+                startDate.setMonth(now.getMonth() - 1);
+                break;
+            case 'year':
+                startDate = new Date(now);
+                startDate.setFullYear(now.getFullYear() - 1);
+                break;
+            default:
+                startDate = new Date(0);
+        }
+        
+        const periodExecutions = executions.filter(e => e.dataHora.toDate() >= startDate);
+        
+        // Tempo médio de execução por rotina
+        const routineStats = {};
+        periodExecutions.forEach(exec => {
+            if (!routineStats[exec.rotinaId]) {
+                routineStats[exec.rotinaId] = {
+                    count: 0,
+                    routine: routines.find(r => r.id === exec.rotinaId)
+                };
+            }
+            routineStats[exec.rotinaId].count++;
+        });
+        
+        // Ranking de técnicos
+        const technicianStats = {};
+        periodExecutions.forEach(exec => {
+            if (!technicianStats[exec.responsavelId]) {
+                technicianStats[exec.responsavelId] = {
+                    name: exec.responsavelNome,
+                    count: 0,
+                    routines: new Set()
+                };
+            }
+            technicianStats[exec.responsavelId].count++;
+            technicianStats[exec.responsavelId].routines.add(exec.rotinaId);
+        });
+        
+        const technicianRanking = Object.values(technicianStats)
+            .map(t => ({
+                ...t,
+                uniqueRoutines: t.routines.size
+            }))
+            .sort((a, b) => b.count - a.count);
+        
+        // Rotinas mais executadas
+        const topRoutines = Object.values(routineStats)
+            .filter(r => r.routine)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+        
+        // Execuções por categoria
+        const categoryStats = {};
+        periodExecutions.forEach(exec => {
+            const routine = routines.find(r => r.id === exec.rotinaId);
+            if (routine) {
+                categoryStats[routine.categoria] = (categoryStats[routine.categoria] || 0) + 1;
+            }
+        });
+        
+        // Execuções por dia da semana
+        const weekdayStats = {
+            'Dom': 0, 'Seg': 0, 'Ter': 0, 'Qua': 0, 'Qui': 0, 'Sex': 0, 'Sáb': 0
+        };
+        const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        periodExecutions.forEach(exec => {
+            const day = exec.dataHora.toDate().getDay();
+            weekdayStats[weekdayNames[day]]++;
+        });
+        
+        return {
+            totalExecutions: periodExecutions.length,
+            technicianRanking,
+            topRoutines,
+            categoryStats,
+            weekdayStats,
+            avgPerDay: (periodExecutions.length / Math.max(1, Math.ceil((now - startDate) / (1000 * 60 * 60 * 24)))).toFixed(1)
+        };
+    }, [executions, routines, selectedPeriod]);
+    
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h2 className="text-2xl font-bold text-gray-800">Relatórios e Métricas</h2>
+                <select 
+                    value={selectedPeriod} 
+                    onChange={e => setSelectedPeriod(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-4 py-2"
+                >
+                    <option value="week">Última Semana</option>
+                    <option value="month">Último Mês</option>
+                    <option value="year">Último Ano</option>
+                    <option value="all">Todo Período</option>
+                </select>
+            </div>
+            
+            {/* Cards de Resumo */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <Card>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-blue-100 rounded-full">
+                            <CheckCircle className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Total de Execuções</p>
+                            <p className="text-2xl font-bold text-gray-800">{stats.totalExecutions}</p>
+                        </div>
+                    </div>
+                </Card>
+                
+                <Card>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-green-100 rounded-full">
+                            <TrendingUp className="w-6 h-6 text-green-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Média por Dia</p>
+                            <p className="text-2xl font-bold text-gray-800">{stats.avgPerDay}</p>
+                        </div>
+                    </div>
+                </Card>
+                
+                <Card>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-purple-100 rounded-full">
+                            <Users className="w-6 h-6 text-purple-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Técnicos Ativos</p>
+                            <p className="text-2xl font-bold text-gray-800">{stats.technicianRanking.length}</p>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Ranking de Técnicos */}
+                <Card>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-yellow-500" />
+                        Ranking de Técnicos
+                    </h3>
+                    <div className="space-y-3">
+                        {stats.technicianRanking.map((tech, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${
+                                        index === 0 ? 'bg-yellow-500' :
+                                        index === 1 ? 'bg-gray-400' :
+                                        index === 2 ? 'bg-orange-600' :
+                                        'bg-blue-500'
+                                    }`}>
+                                        {index + 1}
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-gray-800">{tech.name}</p>
+                                        <p className="text-xs text-gray-500">{tech.uniqueRoutines} rotinas diferentes</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-2xl font-bold text-blue-600">{tech.count}</p>
+                                    <p className="text-xs text-gray-500">execuções</p>
+                                </div>
+                            </div>
+                        ))}
+                        {stats.technicianRanking.length === 0 && (
+                            <p className="text-center text-gray-500 py-4">Nenhuma execução no período</p>
+                        )}
+                    </div>
+                </Card>
+                
+                {/* Top 5 Rotinas */}
+                <Card>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-green-500" />
+                        Rotinas Mais Executadas
+                    </h3>
+                    <div className="space-y-3">
+                        {stats.topRoutines.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div className="flex-1">
+                                    <p className="font-semibold text-gray-800">{item.routine.nome}</p>
+                                    <p className="text-xs text-gray-500">{item.routine.categoria}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xl font-bold text-green-600">{item.count}</p>
+                                    <p className="text-xs text-gray-500">vezes</p>
+                                </div>
+                            </div>
+                        ))}
+                        {stats.topRoutines.length === 0 && (
+                            <p className="text-center text-gray-500 py-4">Nenhuma execução no período</p>
+                        )}
+                    </div>
+                </Card>
+                
+                {/* Execuções por Categoria */}
+                <Card>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Execuções por Categoria</h3>
+                    <div className="space-y-2">
+                        {Object.entries(stats.categoryStats).map(([category, count]) => {
+                            const percentage = (count / stats.totalExecutions * 100).toFixed(1);
+                            return (
+                                <div key={category}>
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span className="font-medium text-gray-700">{category}</span>
+                                        <span className="text-gray-600">{count} ({percentage}%)</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div 
+                                            className="bg-blue-600 h-2 rounded-full transition-all"
+                                            style={{ width: `${percentage}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {Object.keys(stats.categoryStats).length === 0 && (
+                            <p className="text-center text-gray-500 py-4">Nenhuma execução no período</p>
+                        )}
+                    </div>
+                </Card>
+                
+                {/* Execuções por Dia da Semana */}
+                <Card>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Execuções por Dia da Semana</h3>
+                    <div className="space-y-2">
+                        {Object.entries(stats.weekdayStats).map(([day, count]) => {
+                            const maxCount = Math.max(...Object.values(stats.weekdayStats));
+                            const percentage = maxCount > 0 ? (count / maxCount * 100).toFixed(1) : 0;
+                            return (
+                                <div key={day}>
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span className="font-medium text-gray-700">{day}</span>
+                                        <span className="text-gray-600">{count}</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div 
+                                            className="bg-purple-600 h-2 rounded-full transition-all"
+                                            style={{ width: `${percentage}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
 // --- Componente Principal da Aplicação ---
 export default function App() {
     const [user, setUser] = useState(null);
@@ -2219,6 +2545,8 @@ export default function App() {
                 return <HistoryPage executions={executions} routines={routines} />;
             case 'impressoras':
                 return <PrintersPage />;
+            case 'relatorios':
+                return <ReportsPage executions={executions} routines={routines} users={users} />;
             case 'admin':
                 return userData.tipo === 'admin' ? <AdminPage routines={routines} users={users} /> : <p>Acesso negado.</p>;
             default:
@@ -2231,6 +2559,7 @@ export default function App() {
         { name: 'Rotinas', icon: ClipboardList, page: 'rotinas' },
         { name: 'Histórico', icon: History, page: 'historico' },
         { name: 'Impressoras', icon: Printer, page: 'impressoras' },
+        { name: 'Relatórios', icon: BarChart3, page: 'relatorios' },
     ];
     
     if (userData && userData.tipo === 'admin') {
