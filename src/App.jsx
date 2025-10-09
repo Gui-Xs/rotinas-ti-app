@@ -1175,12 +1175,18 @@ const PrintersPage = () => {
     const [printers, setPrinters] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentPrinter, setCurrentPrinter] = useState(null);
+    const [expandedPrinter, setExpandedPrinter] = useState(null);
     const [formState, setFormState] = useState({
         nome: '',
         modelo: '',
         localizacao: '',
         ip: '',
         status: 'ativa',
+        tintaPreta: 100,
+        tintaCiano: 100,
+        tintaMagenta: 100,
+        tintaAmarela: 100,
+        observacoes: ''
     });
 
     useEffect(() => {
@@ -1199,6 +1205,11 @@ const PrintersPage = () => {
             localizacao: '',
             ip: '',
             status: 'ativa',
+            tintaPreta: 100,
+            tintaCiano: 100,
+            tintaMagenta: 100,
+            tintaAmarela: 100,
+            observacoes: ''
         });
         setIsModalOpen(true);
     };
@@ -1211,6 +1222,11 @@ const PrintersPage = () => {
             localizacao: printer.localizacao,
             ip: printer.ip,
             status: printer.status,
+            tintaPreta: printer.tintaPreta || 100,
+            tintaCiano: printer.tintaCiano || 100,
+            tintaMagenta: printer.tintaMagenta || 100,
+            tintaAmarela: printer.tintaAmarela || 100,
+            observacoes: printer.observacoes || ''
         });
         setIsModalOpen(true);
     };
@@ -1276,30 +1292,106 @@ const PrintersPage = () => {
                         </thead>
                         <tbody>
                             {printers.map(printer => (
-                                <tr key={printer.id} className="border-b hover:bg-gray-50">
-                                    <td className="p-2 font-medium">{printer.nome}</td>
-                                    <td className="p-2">{printer.modelo}</td>
-                                    <td className="p-2">{printer.localizacao}</td>
-                                    <td className="p-2">{printer.ip}</td>
-                                    <td className="p-2">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                            printer.status === 'ativa' ? 'bg-green-100 text-green-800' : 
-                                            printer.status === 'manutencao' ? 'bg-yellow-100 text-yellow-800' : 
-                                            'bg-red-100 text-red-800'
-                                        }`}>
-                                            {printer.status === 'ativa' ? 'Ativa' : 
-                                             printer.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
-                                        </span>
-                                    </td>
-                                    <td className="p-2 flex gap-2">
-                                        <button onClick={() => openModalForEdit(printer)} className="text-blue-600 hover:text-blue-800">
-                                            <Edit className="w-5 h-5"/>
-                                        </button>
-                                        <button onClick={() => handleDeletePrinter(printer.id)} className="text-red-600 hover:text-red-800">
-                                            <Trash2 className="w-5 h-5"/>
-                                        </button>
-                                    </td>
-                                </tr>
+                                <React.Fragment key={printer.id}>
+                                    <tr className="border-b hover:bg-gray-50">
+                                        <td className="p-2 font-medium">{printer.nome}</td>
+                                        <td className="p-2">{printer.modelo}</td>
+                                        <td className="p-2">{printer.localizacao}</td>
+                                        <td className="p-2">{printer.ip}</td>
+                                        <td className="p-2">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                                printer.status === 'ativa' ? 'bg-green-100 text-green-800' : 
+                                                printer.status === 'manutencao' ? 'bg-yellow-100 text-yellow-800' : 
+                                                'bg-red-100 text-red-800'
+                                            }`}>
+                                                {printer.status === 'ativa' ? 'Ativa' : 
+                                                 printer.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
+                                            </span>
+                                        </td>
+                                        <td className="p-2 flex gap-2">
+                                            <button 
+                                                onClick={() => setExpandedPrinter(expandedPrinter === printer.id ? null : printer.id)} 
+                                                className="text-gray-600 hover:text-gray-800"
+                                                title="Ver detalhes"
+                                            >
+                                                <ChevronDown className={`w-5 h-5 transition-transform ${expandedPrinter === printer.id ? 'rotate-180' : ''}`}/>
+                                            </button>
+                                            <button onClick={() => openModalForEdit(printer)} className="text-blue-600 hover:text-blue-800">
+                                                <Edit className="w-5 h-5"/>
+                                            </button>
+                                            <button onClick={() => handleDeletePrinter(printer.id)} className="text-red-600 hover:text-red-800">
+                                                <Trash2 className="w-5 h-5"/>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {expandedPrinter === printer.id && (
+                                        <tr className="bg-gray-50">
+                                            <td colSpan="6" className="p-4">
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <h4 className="font-semibold text-gray-700 mb-2">Níveis de Tinta</h4>
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                                            <div>
+                                                                <div className="flex justify-between text-xs mb-1">
+                                                                    <span className="text-gray-600">Preta</span>
+                                                                    <span className="font-semibold">{printer.tintaPreta || 100}%</span>
+                                                                </div>
+                                                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                                                    <div 
+                                                                        className="bg-gray-800 h-2 rounded-full" 
+                                                                        style={{ width: `${printer.tintaPreta || 100}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex justify-between text-xs mb-1">
+                                                                    <span className="text-gray-600">Ciano</span>
+                                                                    <span className="font-semibold">{printer.tintaCiano || 100}%</span>
+                                                                </div>
+                                                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                                                    <div 
+                                                                        className="bg-cyan-500 h-2 rounded-full" 
+                                                                        style={{ width: `${printer.tintaCiano || 100}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex justify-between text-xs mb-1">
+                                                                    <span className="text-gray-600">Magenta</span>
+                                                                    <span className="font-semibold">{printer.tintaMagenta || 100}%</span>
+                                                                </div>
+                                                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                                                    <div 
+                                                                        className="bg-pink-500 h-2 rounded-full" 
+                                                                        style={{ width: `${printer.tintaMagenta || 100}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex justify-between text-xs mb-1">
+                                                                    <span className="text-gray-600">Amarela</span>
+                                                                    <span className="font-semibold">{printer.tintaAmarela || 100}%</span>
+                                                                </div>
+                                                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                                                    <div 
+                                                                        className="bg-yellow-400 h-2 rounded-full" 
+                                                                        style={{ width: `${printer.tintaAmarela || 100}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {printer.observacoes && (
+                                                        <div>
+                                                            <h4 className="font-semibold text-gray-700 mb-1">Observações</h4>
+                                                            <p className="text-sm text-gray-600 bg-white p-2 rounded border">{printer.observacoes}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
                             ))}
                         </tbody>
                     </table>
@@ -1311,24 +1403,30 @@ const PrintersPage = () => {
                 </div>
             </Card>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentPrinter ? 'Editar Impressora' : 'Nova Impressora'}>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentPrinter ? 'Editar Impressora' : 'Nova Impressora'} size="lg">
                 <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-                        <Input name="nome" value={formState.nome} onChange={handleFormChange} placeholder="Ex: Impressora Recepção" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+                            <Input name="nome" value={formState.nome} onChange={handleFormChange} placeholder="Ex: Impressora Recepção" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Modelo *</label>
+                            <Input name="modelo" value={formState.modelo} onChange={handleFormChange} placeholder="Ex: HP LaserJet Pro M404" />
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
-                        <Input name="modelo" value={formState.modelo} onChange={handleFormChange} placeholder="Ex: HP LaserJet Pro M404" />
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Localização</label>
+                            <Input name="localizacao" value={formState.localizacao} onChange={handleFormChange} placeholder="Ex: Sala 101" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Endereço IP</label>
+                            <Input name="ip" value={formState.ip} onChange={handleFormChange} placeholder="Ex: 192.168.1.100" />
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Localização</label>
-                        <Input name="localizacao" value={formState.localizacao} onChange={handleFormChange} placeholder="Ex: Sala 101" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Endereço IP</label>
-                        <Input name="ip" value={formState.ip} onChange={handleFormChange} placeholder="Ex: 192.168.1.100" />
-                    </div>
+                    
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                         <select name="status" value={formState.status} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
@@ -1337,9 +1435,100 @@ const PrintersPage = () => {
                             <option value="inativa">Inativa</option>
                         </select>
                     </div>
-                    <div className="flex justify-end gap-2 pt-4">
+
+                    <div className="border-t pt-4">
+                        <h4 className="font-semibold text-gray-700 mb-3">Níveis de Tinta (%)</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Preta</label>
+                                <Input 
+                                    type="number" 
+                                    name="tintaPreta" 
+                                    value={formState.tintaPreta} 
+                                    onChange={handleFormChange} 
+                                    placeholder="0-100"
+                                    min="0"
+                                    max="100"
+                                />
+                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-gray-800 h-2 rounded-full transition-all" 
+                                        style={{ width: `${formState.tintaPreta}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Ciano</label>
+                                <Input 
+                                    type="number" 
+                                    name="tintaCiano" 
+                                    value={formState.tintaCiano} 
+                                    onChange={handleFormChange} 
+                                    placeholder="0-100"
+                                    min="0"
+                                    max="100"
+                                />
+                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-cyan-500 h-2 rounded-full transition-all" 
+                                        style={{ width: `${formState.tintaCiano}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Magenta</label>
+                                <Input 
+                                    type="number" 
+                                    name="tintaMagenta" 
+                                    value={formState.tintaMagenta} 
+                                    onChange={handleFormChange} 
+                                    placeholder="0-100"
+                                    min="0"
+                                    max="100"
+                                />
+                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-pink-500 h-2 rounded-full transition-all" 
+                                        style={{ width: `${formState.tintaMagenta}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Amarela</label>
+                                <Input 
+                                    type="number" 
+                                    name="tintaAmarela" 
+                                    value={formState.tintaAmarela} 
+                                    onChange={handleFormChange} 
+                                    placeholder="0-100"
+                                    min="0"
+                                    max="100"
+                                />
+                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-yellow-400 h-2 rounded-full transition-all" 
+                                        style={{ width: `${formState.tintaAmarela}%` }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Observações / Problemas</label>
+                        <textarea 
+                            name="observacoes" 
+                            value={formState.observacoes} 
+                            onChange={handleFormChange} 
+                            rows="3" 
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                            placeholder="Anote aqui problemas, manutenções necessárias, etc..."
+                        ></textarea>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-4 border-t">
                         <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleFormSubmit}>Salvar</Button>
+                        <Button onClick={handleFormSubmit}>Salvar Impressora</Button>
                     </div>
                 </div>
             </Modal>
