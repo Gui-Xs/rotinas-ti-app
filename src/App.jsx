@@ -115,19 +115,12 @@ const Logo = ({ size = 'md', className = '' }) => {
         lg: 'h-16'
     };
     
-    // Você pode substituir este SVG pela sua logo ou usar uma imagem
-    // Para usar uma imagem, substitua o SVG por: <img src="/logo.png" alt="Logo" className={`${sizes[size]} ${className}`} />
     return (
-        <svg className={`${sizes[size]} ${className}`} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Ícone de checklist */}
-            <rect x="5" y="10" width="35" height="40" rx="4" fill="#3B82F6" />
-            <path d="M15 25 L20 30 L30 20" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M15 38 L20 43 L30 33" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            
-            {/* Texto */}
-            <text x="50" y="30" fontFamily="Arial, sans-serif" fontSize="18" fontWeight="bold" fill="#1E40AF">Rotinas</text>
-            <text x="50" y="48" fontFamily="Arial, sans-serif" fontSize="14" fill="#3B82F6">TI Manager</text>
-        </svg>
+        <img 
+            src="/hpaes.png" 
+            alt="HPAES Logo" 
+            className={`${sizes[size]} object-contain ${className}`} 
+        />
     );
 };
 
