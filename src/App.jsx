@@ -57,6 +57,8 @@ import {
     Download,
     Bell,
     AlertCircle,
+    Search,
+    Droplet,
     BarChart3,
     PieChart,
     Activity
@@ -741,6 +743,9 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
 
 const RoutinesPage = ({ routines, executions, userData }) => {
     const [filter, setFilter] = useState('Todas');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [priorityFilter, setPriorityFilter] = useState('Todas');
+    const [statusFilter, setStatusFilter] = useState('Todas');
     const [executingRoutine, setExecutingRoutine] = useState(null);
     const [observacao, setObservacao] = useState('');
     const [foto, setFoto] = useState(null);
@@ -862,21 +867,110 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     }, [executions]);
 
     const filteredRoutines = useMemo(() => {
-        if (filter === 'Todas') return routines;
-        return routines.filter(r => r.categoria === filter);
-    }, [filter, routines]);
+        let filtered = routines;
+        
+        // Filtro por categoria
+        if (filter !== 'Todas') {
+            filtered = filtered.filter(r => r.categoria === filter);
+        }
+        
+        // Filtro por prioridade
+        if (priorityFilter !== 'Todas') {
+            filtered = filtered.filter(r => r.prioridade === priorityFilter);
+        }
+        
+        // Filtro por status
+        if (statusFilter !== 'Todas') {
+            filtered = filtered.filter(r => {
+                const status = getRoutineStatus(r);
+                if (statusFilter === 'Concluída') return status.isDone;
+                if (statusFilter === 'Pendente') return !status.isDone;
+                return true;
+            });
+        }
+        
+        // Busca por texto
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(r => 
+                r.nome.toLowerCase().includes(term) ||
+                (r.descricao && r.descricao.toLowerCase().includes(term)) ||
+                (r.responsavel && r.responsavel.toLowerCase().includes(term))
+            );
+        }
+        
+        return filtered;
+    }, [filter, priorityFilter, statusFilter, searchTerm, routines, getRoutineStatus]);
 
     const categories = ['Todas', ...new Set(routines.map(r => r.categoria))];
 
     return (
         <div>
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h2 className="text-2xl font-bold text-gray-800">Checklist de Rotinas</h2>
-                <div className="flex items-center gap-2">
-                    <Filter className="text-gray-600 w-5 h-5" />
-                    <select value={filter} onChange={e => setFilter(e.target.value)} className="border border-gray-300 rounded-lg p-2">
-                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Checklist de Rotinas</h2>
+                
+                {/* Barra de Busca */}
+                <div className="mb-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            placeholder="Buscar por nome, descrição ou responsável..."
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+                
+                {/* Filtros */}
+                <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                        <Filter className="text-gray-600 w-5 h-5" />
+                        <select value={filter} onChange={e => setFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                    </div>
+                    
+                    <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="Todas">Todas Prioridades</option>
+                        <option value="alta">🔴 Alta</option>
+                        <option value="media">🟡 Média</option>
+                        <option value="baixa">🟢 Baixa</option>
                     </select>
+                    
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="Todas">Todos Status</option>
+                        <option value="Concluída">✅ Concluída</option>
+                        <option value="Pendente">⏳ Pendente</option>
+                    </select>
+                    
+                    {(searchTerm || filter !== 'Todas' || priorityFilter !== 'Todas' || statusFilter !== 'Todas') && (
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                setFilter('Todas');
+                                setPriorityFilter('Todas');
+                                setStatusFilter('Todas');
+                            }}
+                            className="px-3 py-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                            Limpar Filtros
+                        </button>
+                    )}
+                </div>
+                
+                {/* Contador de Resultados */}
+                <div className="mt-3 text-sm text-gray-600">
+                    Mostrando <span className="font-semibold">{filteredRoutines.length}</span> de <span className="font-semibold">{routines.length}</span> rotinas
                 </div>
             </div>
 
@@ -1011,6 +1105,7 @@ const HistoryPage = ({ executions, routines }) => {
     const [filterUser, setFilterUser] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [filterRoutine, setFilterRoutine] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const routinesMap = useMemo(() => {
         return routines.reduce((acc, routine) => {
@@ -1040,10 +1135,17 @@ const HistoryPage = ({ executions, routines }) => {
                 const categoryMatch = !filterCategory || routine.categoria === filterCategory;
                 const routineMatch = !filterRoutine || exec.rotinaId === filterRoutine;
 
-                return dateMatch && dateEndMatch && userMatch && categoryMatch && routineMatch;
+                // Busca por texto
+                const searchMatch = !searchTerm.trim() || (
+                    routine.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    exec.responsavelNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (exec.observacao && exec.observacao.toLowerCase().includes(searchTerm.toLowerCase()))
+                );
+
+                return dateMatch && dateEndMatch && userMatch && categoryMatch && routineMatch && searchMatch;
             })
             .sort((a, b) => b.dataHora.toMillis() - a.dataHora.toMillis());
-    }, [executions, filterDate, filterDateEnd, filterUser, filterCategory, filterRoutine, routinesMap]);
+    }, [executions, filterDate, filterDateEnd, filterUser, filterCategory, filterRoutine, searchTerm, routinesMap]);
 
     const exportToCSV = () => {
         const headers = ['Data/Hora', 'Rotina', 'Categoria', 'Responsável', 'Observação'];
@@ -1076,6 +1178,7 @@ const HistoryPage = ({ executions, routines }) => {
         setFilterUser('');
         setFilterCategory('');
         setFilterRoutine('');
+        setSearchTerm('');
     };
 
     return (
@@ -1090,6 +1193,29 @@ const HistoryPage = ({ executions, routines }) => {
             
             <Card className="mb-6">
                 <div className="space-y-4">
+                    {/* Barra de Busca */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder="Buscar por rotina, técnico ou observação..."
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
@@ -1176,6 +1302,9 @@ const PrintersPage = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentPrinter, setCurrentPrinter] = useState(null);
     const [expandedPrinter, setExpandedPrinter] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('Todas');
+    const [inkFilter, setInkFilter] = useState('Todas');
     const [formState, setFormState] = useState({
         nome: '',
         modelo: '',
@@ -1267,14 +1396,144 @@ const PrintersPage = () => {
         }
     };
 
+    // Função para verificar se a tinta está baixa
+    const hasLowInk = (printer) => {
+        const threshold = 20;
+        return (
+            (printer.tintaPreta || 100) <= threshold ||
+            (printer.tintaCiano || 100) <= threshold ||
+            (printer.tintaMagenta || 100) <= threshold ||
+            (printer.tintaAmarela || 100) <= threshold
+        );
+    };
+
+    // Função para obter o nível mínimo de tinta
+    const getMinInkLevel = (printer) => {
+        return Math.min(
+            printer.tintaPreta || 100,
+            printer.tintaCiano || 100,
+            printer.tintaMagenta || 100,
+            printer.tintaAmarela || 100
+        );
+    };
+
+    // Filtrar impressoras
+    const filteredPrinters = useMemo(() => {
+        let filtered = printers;
+
+        // Filtro por status
+        if (statusFilter !== 'Todas') {
+            filtered = filtered.filter(p => p.status === statusFilter);
+        }
+
+        // Filtro por nível de tinta
+        if (inkFilter === 'Baixa') {
+            filtered = filtered.filter(p => hasLowInk(p));
+        } else if (inkFilter === 'Crítica') {
+            filtered = filtered.filter(p => getMinInkLevel(p) <= 10);
+        }
+
+        // Busca por texto
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(p =>
+                p.nome.toLowerCase().includes(term) ||
+                (p.modelo && p.modelo.toLowerCase().includes(term)) ||
+                (p.localizacao && p.localizacao.toLowerCase().includes(term)) ||
+                (p.ip && p.ip.toLowerCase().includes(term))
+            );
+        }
+
+        return filtered;
+    }, [printers, statusFilter, inkFilter, searchTerm]);
+
+    // Contar impressoras com tinta baixa
+    const lowInkCount = useMemo(() => {
+        return printers.filter(p => hasLowInk(p)).length;
+    }, [printers]);
+
     return (
         <div>
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h2 className="text-2xl font-bold text-gray-800">Gerenciar Impressoras</h2>
-                <Button onClick={openModalForNew}>
-                    <Plus className="w-5 h-5"/>
-                    Nova Impressora
-                </Button>
+            <div className="mb-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                    <h2 className="text-2xl font-bold text-gray-800">Gerenciar Impressoras</h2>
+                    <Button onClick={openModalForNew}>
+                        <Plus className="w-5 h-5"/>
+                        Nova Impressora
+                    </Button>
+                </div>
+
+                {/* Alerta de Tinta Baixa */}
+                {lowInkCount > 0 && (
+                    <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                            <h3 className="font-semibold text-red-800">Atenção: Tinta Baixa!</h3>
+                            <p className="text-sm text-red-700">
+                                {lowInkCount} {lowInkCount === 1 ? 'impressora precisa' : 'impressoras precisam'} de reposição de tinta (≤ 20%)
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Barra de Busca */}
+                <div className="mb-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            placeholder="Buscar por nome, modelo, localização ou IP..."
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Filtros */}
+                <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                        <Filter className="text-gray-600 w-5 h-5" />
+                        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="Todas">Todos Status</option>
+                            <option value="ativa">✅ Ativa</option>
+                            <option value="manutencao">🔧 Manutenção</option>
+                            <option value="inativa">❌ Inativa</option>
+                        </select>
+                    </div>
+
+                    <select value={inkFilter} onChange={e => setInkFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="Todas">Todos Níveis de Tinta</option>
+                        <option value="Baixa">🟡 Tinta Baixa (≤ 20%)</option>
+                        <option value="Crítica">🔴 Tinta Crítica (≤ 10%)</option>
+                    </select>
+
+                    {(searchTerm || statusFilter !== 'Todas' || inkFilter !== 'Todas') && (
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                setStatusFilter('Todas');
+                                setInkFilter('Todas');
+                            }}
+                            className="px-3 py-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                            Limpar Filtros
+                        </button>
+                    )}
+                </div>
+
+                {/* Contador de Resultados */}
+                <div className="mt-3 text-sm text-gray-600">
+                    Mostrando <span className="font-semibold">{filteredPrinters.length}</span> de <span className="font-semibold">{printers.length}</span> impressoras
+                </div>
             </div>
             
             <Card>
@@ -1291,10 +1550,20 @@ const PrintersPage = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {printers.map(printer => (
+                            {filteredPrinters.map(printer => (
                                 <React.Fragment key={printer.id}>
                                     <tr className="border-b hover:bg-gray-50">
-                                        <td className="p-2 font-medium">{printer.nome}</td>
+                                        <td className="p-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium">{printer.nome}</span>
+                                                {hasLowInk(printer) && (
+                                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold" title="Tinta baixa">
+                                                        <Droplet className="w-3 h-3" />
+                                                        Baixa
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="p-2">{printer.modelo}</td>
                                         <td className="p-2">{printer.localizacao}</td>
                                         <td className="p-2">{printer.ip}</td>
@@ -1395,11 +1664,15 @@ const PrintersPage = () => {
                             ))}
                         </tbody>
                     </table>
-                    {printers.length === 0 && (
+                    {printers.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                             Nenhuma impressora cadastrada. Clique em "Nova Impressora" para adicionar.
                         </div>
-                    )}
+                    ) : filteredPrinters.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                            Nenhuma impressora encontrada com os filtros aplicados.
+                        </div>
+                    ) : null}
                 </div>
             </Card>
 
