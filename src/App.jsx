@@ -135,11 +135,13 @@ const Button = ({ children, onClick, variant = 'primary', className = '', type =
     );
 };
 
-const Input = ({ type = 'text', value, onChange, placeholder, className = "" }) => (
+const Input = ({ type = 'text', value, onChange, placeholder, className = "", name, onKeyPress }) => (
     <input
         type={type}
+        name={name}
         value={value}
         onChange={onChange}
+        onKeyPress={onKeyPress}
         placeholder={placeholder}
         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${className}`}
     />
