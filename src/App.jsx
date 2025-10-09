@@ -198,14 +198,22 @@ const SimpleBarChart = ({ data, title }) => {
 
 // Componente de Gráfico de Pizza Simples
 const SimplePieChart = ({ data, title }) => {
+    if (!data || data.length === 0) {
+        return (
+            <div className="text-center py-8 text-gray-500">
+                <p>Sem dados para exibir</p>
+            </div>
+        );
+    }
+
     const total = data.reduce((sum, item) => sum + item.value, 0);
-    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6'];
     
     return (
         <div className="space-y-4">
-            {title && <h4 className="font-semibold text-gray-700 text-center">{title}</h4>}
-            <div className="flex items-center justify-center">
-                <div className="relative w-48 h-48">
+            {title && <h4 className="font-semibold text-gray-700">{title}</h4>}
+            <div className="flex flex-col items-center gap-4">
+                <div className="relative w-40 h-40">
                     <svg viewBox="0 0 100 100" className="transform -rotate-90">
                         {data.map((item, index) => {
                             const percentage = (item.value / total) * 100;
@@ -224,27 +232,34 @@ const SimplePieChart = ({ data, title }) => {
                                     strokeWidth="31.831"
                                     strokeDasharray={strokeDasharray}
                                     strokeDashoffset={strokeDashoffset}
+                                    className="transition-opacity hover:opacity-80"
                                 />
                             );
                         })}
                     </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="text-xl font-bold text-gray-800">{total}</div>
+                            <div className="text-xs text-gray-500">Total</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div className="space-y-2">
-                {data.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
+                <div className="grid grid-cols-2 gap-2 w-full text-xs">
+                    {data.map((item, index) => (
+                        <div key={index} className="flex items-center gap-1.5">
                             <div 
-                                className="w-3 h-3 rounded-full" 
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
                                 style={{ backgroundColor: colors[index % colors.length] }}
                             />
-                            <span className="text-gray-600">{item.label}</span>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-gray-600 truncate">{item.label}</div>
+                                <div className="font-semibold text-gray-800">
+                                    {item.value} <span className="text-gray-500">({Math.round((item.value / total) * 100)}%)</span>
+                                </div>
+                            </div>
                         </div>
-                        <span className="font-semibold text-gray-800">
-                            {item.value} ({Math.round((item.value / total) * 100)}%)
-                        </span>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
         </div>
     );
@@ -1304,7 +1319,7 @@ const PrintersPage = () => {
 };
 
 const AdminPage = ({ routines, users }) => {
-    const [page, setPage] = useState('routines');
+    const [adminTab, setAdminTab] = useState('routines');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentRoutine, setCurrentRoutine] = useState(null);
     const [formState, setFormState] = useState({
@@ -1421,15 +1436,15 @@ const AdminPage = ({ routines, users }) => {
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Administração</h2>
 
             <div className="flex border-b mb-6">
-                <button onClick={() => setPage('routines')} className={`px-4 py-2 font-semibold ${page === 'routines' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
+                <button onClick={() => setAdminTab('routines')} className={`px-4 py-2 font-semibold ${adminTab === 'routines' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
                     Gerenciar Rotinas
                 </button>
-                <button onClick={() => setPage('users')} className={`px-4 py-2 font-semibold ${page === 'users' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
+                <button onClick={() => setAdminTab('users')} className={`px-4 py-2 font-semibold ${adminTab === 'users' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
                     Gerenciar Usuários
                 </button>
             </div>
 
-            {page === 'routines' && (
+            {adminTab === 'routines' && (
                 <div>
                     <div className="flex justify-end mb-4">
                         <Button onClick={openModalForNew}>
@@ -1467,7 +1482,7 @@ const AdminPage = ({ routines, users }) => {
                 </div>
             )}
             
-            {page === 'users' && (
+            {adminTab === 'users' && (
                 <Card>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
