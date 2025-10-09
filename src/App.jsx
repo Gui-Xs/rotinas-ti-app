@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
+import logoImage from './assets/hpaes.png';
 import { 
     getAuth, 
     onAuthStateChanged, 
@@ -117,7 +118,7 @@ const Logo = ({ size = 'md', className = '' }) => {
     
     return (
         <img 
-            src="/hpaes.png" 
+            src={logoImage} 
             alt="HPAES Logo" 
             className={`${sizes[size]} object-contain ${className}`} 
         />
