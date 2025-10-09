@@ -46,7 +46,8 @@ import {
     Camera, 
     Filter, 
     X, 
-    UploadCloud 
+    UploadCloud,
+    Printer
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
@@ -641,6 +642,182 @@ const HistoryPage = ({ executions, routines }) => {
     );
 };
 
+const PrintersPage = () => {
+    const [printers, setPrinters] = useState([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentPrinter, setCurrentPrinter] = useState(null);
+    const [formState, setFormState] = useState({
+        nome: '',
+        modelo: '',
+        localizacao: '',
+        ip: '',
+        status: 'ativa',
+    });
+
+    useEffect(() => {
+        const printersRef = collection(db, `/artifacts/${appId}/public/data/impressoras`);
+        const unsubscribe = onSnapshot(printersRef, (snapshot) => {
+            setPrinters(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, err => console.error("Erro ao carregar impressoras:", err));
+        return () => unsubscribe();
+    }, []);
+
+    const openModalForNew = () => {
+        setCurrentPrinter(null);
+        setFormState({
+            nome: '',
+            modelo: '',
+            localizacao: '',
+            ip: '',
+            status: 'ativa',
+        });
+        setIsModalOpen(true);
+    };
+    
+    const openModalForEdit = (printer) => {
+        setCurrentPrinter(printer);
+        setFormState({
+            nome: printer.nome,
+            modelo: printer.modelo,
+            localizacao: printer.localizacao,
+            ip: printer.ip,
+            status: printer.status,
+        });
+        setIsModalOpen(true);
+    };
+    
+    const handleFormChange = (e) => {
+        const { name, value } = e.target;
+        setFormState(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleFormSubmit = async () => {
+        if (!formState.nome || !formState.modelo) {
+            alert("Nome e modelo são obrigatórios.");
+            return;
+        }
+
+        try {
+            if (currentPrinter) {
+                const printerRef = doc(db, `/artifacts/${appId}/public/data/impressoras`, currentPrinter.id);
+                await updateDoc(printerRef, formState);
+            } else {
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/impressoras`), formState);
+            }
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error("Erro ao salvar impressora:", error);
+            alert("Ocorreu um erro ao salvar.");
+        }
+    };
+
+    const handleDeletePrinter = async (printerId) => {
+        if (window.confirm("Tem certeza que deseja excluir esta impressora? Esta ação não pode ser desfeita.")) {
+            try {
+                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/impressoras`, printerId));
+            } catch (error) {
+                console.error("Erro ao excluir impressora:", error);
+                alert("Falha ao excluir a impressora.");
+            }
+        }
+    };
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <h2 className="text-2xl font-bold text-gray-800">Gerenciar Impressoras</h2>
+                <Button onClick={openModalForNew}>
+                    <Plus className="w-5 h-5"/>
+                    Nova Impressora
+                </Button>
+            </div>
+            
+            <Card>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b">
+                                <th className="p-2">Nome</th>
+                                <th className="p-2">Modelo</th>
+                                <th className="p-2">Localização</th>
+                                <th className="p-2">IP</th>
+                                <th className="p-2">Status</th>
+                                <th className="p-2">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {printers.map(printer => (
+                                <tr key={printer.id} className="border-b hover:bg-gray-50">
+                                    <td className="p-2 font-medium">{printer.nome}</td>
+                                    <td className="p-2">{printer.modelo}</td>
+                                    <td className="p-2">{printer.localizacao}</td>
+                                    <td className="p-2">{printer.ip}</td>
+                                    <td className="p-2">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                            printer.status === 'ativa' ? 'bg-green-100 text-green-800' : 
+                                            printer.status === 'manutencao' ? 'bg-yellow-100 text-yellow-800' : 
+                                            'bg-red-100 text-red-800'
+                                        }`}>
+                                            {printer.status === 'ativa' ? 'Ativa' : 
+                                             printer.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
+                                        </span>
+                                    </td>
+                                    <td className="p-2 flex gap-2">
+                                        <button onClick={() => openModalForEdit(printer)} className="text-blue-600 hover:text-blue-800">
+                                            <Edit className="w-5 h-5"/>
+                                        </button>
+                                        <button onClick={() => handleDeletePrinter(printer.id)} className="text-red-600 hover:text-red-800">
+                                            <Trash2 className="w-5 h-5"/>
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {printers.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                            Nenhuma impressora cadastrada. Clique em "Nova Impressora" para adicionar.
+                        </div>
+                    )}
+                </div>
+            </Card>
+
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentPrinter ? 'Editar Impressora' : 'Nova Impressora'}>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                        <Input name="nome" value={formState.nome} onChange={handleFormChange} placeholder="Ex: Impressora Recepção" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
+                        <Input name="modelo" value={formState.modelo} onChange={handleFormChange} placeholder="Ex: HP LaserJet Pro M404" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Localização</label>
+                        <Input name="localizacao" value={formState.localizacao} onChange={handleFormChange} placeholder="Ex: Sala 101" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Endereço IP</label>
+                        <Input name="ip" value={formState.ip} onChange={handleFormChange} placeholder="Ex: 192.168.1.100" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <select name="status" value={formState.status} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="ativa">Ativa</option>
+                            <option value="manutencao">Manutenção</option>
+                            <option value="inativa">Inativa</option>
+                        </select>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                        <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleFormSubmit}>Salvar</Button>
+                    </div>
+                </div>
+            </Modal>
+        </div>
+    );
+};
+
 const AdminPage = ({ routines, users }) => {
     const [page, setPage] = useState('routines');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -947,6 +1124,8 @@ export default function App() {
                 return <RoutinesPage routines={routines} executions={executions} userData={userData} />;
             case 'historico':
                 return <HistoryPage executions={executions} routines={routines} />;
+            case 'impressoras':
+                return <PrintersPage />;
             case 'admin':
                 return userData.tipo === 'admin' ? <AdminPage routines={routines} users={users} /> : <p>Acesso negado.</p>;
             default:
@@ -958,6 +1137,7 @@ export default function App() {
         { name: 'Dashboard', icon: Home, page: 'dashboard' },
         { name: 'Rotinas', icon: ClipboardList, page: 'rotinas' },
         { name: 'Histórico', icon: History, page: 'historico' },
+        { name: 'Impressoras', icon: Printer, page: 'impressoras' },
     ];
     
     if (userData && userData.tipo === 'admin') {
@@ -971,7 +1151,7 @@ export default function App() {
                 <div className="h-16 flex items-center justify-center border-b">
                     <h1 className="text-xl font-bold text-blue-600">Rotinas TI HPAES</h1>
                 </div>
-                <nav className="flex-1 p-4 space-y-2">
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
                     {navItems.map(item => (
                          <button key={item.name} onClick={() => setPage(item.page)} className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-left ${page === item.page ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}>
                              <item.icon className="w-6 h-6" />
