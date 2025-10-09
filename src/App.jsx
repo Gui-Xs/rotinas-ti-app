@@ -17,6 +17,7 @@ import {
     doc, 
     setDoc, 
     getDoc,
+    getDocs,
     updateDoc,
     deleteDoc,
     query,
@@ -398,10 +399,16 @@ const LoginPage = ({ setPage }) => {
                 }
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
+                
+                // Verificar se é o primeiro usuário
+                const usersRef = collection(db, `/artifacts/${appId}/users`);
+                const usersSnapshot = await getDocs(usersRef);
+                const isFirstUser = usersSnapshot.empty;
+                
                 await setDoc(doc(db, `/artifacts/${appId}/users`, user.uid), {
                     nome: nome,
                     email: user.email,
-                    tipo: 'tecnico'
+                    tipo: isFirstUser ? 'admin' : 'tecnico'
                 });
             }
         } catch (err) {
