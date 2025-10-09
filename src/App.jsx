@@ -47,7 +47,17 @@ import {
     Filter, 
     X, 
     UploadCloud,
-    Printer
+    Printer,
+    AlertTriangle,
+    TrendingUp,
+    Calendar,
+    FileText,
+    Download,
+    Bell,
+    AlertCircle,
+    BarChart3,
+    PieChart,
+    Activity
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
@@ -135,21 +145,213 @@ const Input = ({ type = 'text', value, onChange, placeholder, className = "" }) 
     />
 );
 
-const Modal = ({ isOpen, onClose, title, children }) => {
+const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
     if (!isOpen) return null;
+    const sizeClasses = {
+        sm: 'max-w-sm',
+        md: 'max-w-md',
+        lg: 'max-w-2xl',
+        xl: 'max-w-4xl'
+    };
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md m-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 overflow-y-auto">
+            <div className={`bg-white rounded-lg shadow-xl w-full ${sizeClasses[size]} m-auto my-8`}>
                 <div className="flex justify-between items-center p-4 border-b">
                     <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
                         <X className="w-6 h-6" />
                     </button>
                 </div>
-                <div className="p-4">
+                <div className="p-4 max-h-[70vh] overflow-y-auto">
                     {children}
                 </div>
             </div>
+        </div>
+    );
+};
+
+// Componente de Gráfico de Barras Simples
+const SimpleBarChart = ({ data, title }) => {
+    const maxValue = Math.max(...data.map(d => d.value), 1);
+    return (
+        <div className="space-y-3">
+            {title && <h4 className="font-semibold text-gray-700">{title}</h4>}
+            {data.map((item, index) => (
+                <div key={index} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">{item.label}</span>
+                        <span className="font-semibold text-gray-800">{item.value}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                            style={{ width: `${(item.value / maxValue) * 100}%` }}
+                        />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// Componente de Gráfico de Pizza Simples
+const SimplePieChart = ({ data, title }) => {
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+    
+    return (
+        <div className="space-y-4">
+            {title && <h4 className="font-semibold text-gray-700 text-center">{title}</h4>}
+            <div className="flex items-center justify-center">
+                <div className="relative w-48 h-48">
+                    <svg viewBox="0 0 100 100" className="transform -rotate-90">
+                        {data.map((item, index) => {
+                            const percentage = (item.value / total) * 100;
+                            const prevPercentages = data.slice(0, index).reduce((sum, d) => sum + (d.value / total) * 100, 0);
+                            const strokeDasharray = `${percentage} ${100 - percentage}`;
+                            const strokeDashoffset = -prevPercentages;
+                            
+                            return (
+                                <circle
+                                    key={index}
+                                    cx="50"
+                                    cy="50"
+                                    r="15.915"
+                                    fill="transparent"
+                                    stroke={colors[index % colors.length]}
+                                    strokeWidth="31.831"
+                                    strokeDasharray={strokeDasharray}
+                                    strokeDashoffset={strokeDashoffset}
+                                />
+                            );
+                        })}
+                    </svg>
+                </div>
+            </div>
+            <div className="space-y-2">
+                {data.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                            <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: colors[index % colors.length] }}
+                            />
+                            <span className="text-gray-600">{item.label}</span>
+                        </div>
+                        <span className="font-semibold text-gray-800">
+                            {item.value} ({Math.round((item.value / total) * 100)}%)
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// Hook para notificações
+const useNotifications = (routines, executions) => {
+    const [notifications, setNotifications] = useState([]);
+
+    useEffect(() => {
+        const checkNotifications = () => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const startOfToday = Timestamp.fromDate(today);
+
+            const newNotifications = [];
+            const completedTodayIds = new Set(
+                executions
+                    .filter(e => e.dataHora >= startOfToday)
+                    .map(e => e.rotinaId)
+            );
+
+            // Verificar rotinas diárias pendentes
+            const dailyRoutines = routines.filter(r => r.frequencia === 'diaria');
+            const pendingDaily = dailyRoutines.filter(r => !completedTodayIds.has(r.id));
+
+            if (pendingDaily.length > 0) {
+                newNotifications.push({
+                    id: 'daily-pending',
+                    type: 'warning',
+                    title: 'Rotinas Diárias Pendentes',
+                    message: `Você tem ${pendingDaily.length} rotina(s) diária(s) pendente(s).`,
+                    timestamp: new Date()
+                });
+            }
+
+            // Verificar rotinas de alta prioridade
+            const highPriority = pendingDaily.filter(r => r.prioridade === 'alta');
+            if (highPriority.length > 0) {
+                newNotifications.push({
+                    id: 'high-priority',
+                    type: 'error',
+                    title: 'Atenção: Rotinas Críticas!',
+                    message: `${highPriority.length} rotina(s) de alta prioridade precisa(m) de atenção.`,
+                    timestamp: new Date()
+                });
+            }
+
+            setNotifications(newNotifications);
+        };
+
+        checkNotifications();
+        const interval = setInterval(checkNotifications, 60000); // Verificar a cada minuto
+
+        return () => clearInterval(interval);
+    }, [routines, executions]);
+
+    return notifications;
+};
+
+// Componente de Notificações
+const NotificationBell = ({ notifications }) => {
+    const [showNotifications, setShowNotifications] = useState(false);
+
+    return (
+        <div className="relative">
+            <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+                <Bell className="w-6 h-6" />
+                {notifications.length > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                )}
+            </button>
+
+            {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border z-50">
+                    <div className="p-4 border-b">
+                        <h3 className="font-semibold text-gray-800">Notificações</h3>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                        {notifications.length > 0 ? (
+                            notifications.map(notif => (
+                                <div key={notif.id} className={`p-4 border-b hover:bg-gray-50 ${
+                                    notif.type === 'error' ? 'bg-red-50' : 
+                                    notif.type === 'warning' ? 'bg-yellow-50' : 'bg-blue-50'
+                                }`}>
+                                    <div className="flex items-start gap-3">
+                                        <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                                            notif.type === 'error' ? 'text-red-600' : 
+                                            notif.type === 'warning' ? 'text-yellow-600' : 'text-blue-600'
+                                        }`} />
+                                        <div className="flex-1">
+                                            <h4 className="font-semibold text-sm text-gray-800">{notif.title}</h4>
+                                            <p className="text-sm text-gray-600 mt-1">{notif.message}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="p-8 text-center text-gray-500">
+                                <Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                                <p>Nenhuma notificação</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -273,69 +475,210 @@ const ProgressCircle = ({ percentage }) => {
     );
 };
 
-const DashboardPage = ({ routines, executions, setPage }) => {
-    const { pendingToday, completedToday, overdue } = useMemo(() => {
+const DashboardPage = ({ routines, executions, setPage, users }) => {
+    const stats = useMemo(() => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
         const startOfToday = Timestamp.fromDate(today);
-
-        const dailyRoutines = routines.filter(r => r.frequencia === 'diaria');
         
-        const completedTodayIds = new Set(
-            executions
-                .filter(e => e.dataHora >= startOfToday)
-                .map(e => e.rotinaId)
-        );
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        const startOfWeekTimestamp = Timestamp.fromDate(startOfWeek);
+        
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const startOfMonthTimestamp = Timestamp.fromDate(startOfMonth);
 
+        // Rotinas por frequência
+        const dailyRoutines = routines.filter(r => r.frequencia === 'diaria');
+        const weeklyRoutines = routines.filter(r => r.frequencia === 'semanal');
+        const monthlyRoutines = routines.filter(r => r.frequencia === 'mensal');
+        
+        // Execuções por período
+        const executionsToday = executions.filter(e => e.dataHora >= startOfToday);
+        const executionsWeek = executions.filter(e => e.dataHora >= startOfWeekTimestamp);
+        const executionsMonth = executions.filter(e => e.dataHora >= startOfMonthTimestamp);
+        
+        const completedTodayIds = new Set(executionsToday.map(e => e.rotinaId));
+        const completedWeekIds = new Set(executionsWeek.map(e => e.rotinaId));
+        const completedMonthIds = new Set(executionsMonth.map(e => e.rotinaId));
+
+        // Pendentes e atrasadas
         let pendingToday = [];
         let completedToday = [];
-        let overdue = [];
+        let overdueRoutines = [];
 
         dailyRoutines.forEach(routine => {
             if(completedTodayIds.has(routine.id)) {
                 completedToday.push(routine);
             } else {
                 pendingToday.push(routine);
+                if(routine.prioridade === 'alta') {
+                    overdueRoutines.push(routine);
+                }
             }
         });
         
-        return { pendingToday, completedToday, overdue };
+        // Rotinas por categoria
+        const categoriesData = {};
+        routines.forEach(r => {
+            categoriesData[r.categoria] = (categoriesData[r.categoria] || 0) + 1;
+        });
+        
+        // Execuções por categoria esta semana
+        const categoryExecutions = {};
+        executionsWeek.forEach(exec => {
+            const routine = routines.find(r => r.id === exec.rotinaId);
+            if(routine) {
+                categoryExecutions[routine.categoria] = (categoryExecutions[routine.categoria] || 0) + 1;
+            }
+        });
+        
+        // Tempo médio de conclusão (simulado - em horas desde a última execução)
+        const avgCompletionTime = executionsToday.length > 0 ? 
+            Math.round(executionsToday.length * 0.5) : 0;
+
+        return {
+            pendingToday,
+            completedToday,
+            overdueRoutines,
+            totalToday: dailyRoutines.length,
+            totalWeek: weeklyRoutines.length,
+            totalMonth: monthlyRoutines.length,
+            completedWeek: weeklyRoutines.filter(r => completedWeekIds.has(r.id)).length,
+            completedMonth: monthlyRoutines.filter(r => completedMonthIds.has(r.id)).length,
+            categoriesData,
+            categoryExecutions,
+            avgCompletionTime,
+            executionsToday: executionsToday.length,
+            executionsWeek: executionsWeek.length,
+            executionsMonth: executionsMonth.length
+        };
     }, [routines, executions]);
 
-    const totalToday = pendingToday.length + completedToday.length;
-    const completionPercentage = totalToday > 0 ? (completedToday.length / totalToday) * 100 : 100;
+    const completionPercentage = stats.totalToday > 0 ? 
+        (stats.completedToday.length / stats.totalToday) * 100 : 100;
+
+    const categoryChartData = Object.entries(stats.categoriesData).map(([label, value]) => ({
+        label,
+        value
+    }));
+
+    const weeklyExecutionsData = Object.entries(stats.categoryExecutions).map(([label, value]) => ({
+        label,
+        value
+    }));
 
     return (
-        <div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h2>
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-800">Dashboard</h2>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Calendar className="w-4 h-4" />
+                    <span>{new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                </div>
+            </div>
+
+            {/* Alertas de Rotinas Atrasadas */}
+            {stats.overdueRoutines.length > 0 && (
+                <Card className="bg-red-50 border-l-4 border-red-500">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+                        <div>
+                            <h3 className="font-bold text-red-800">Atenção! Rotinas Críticas Pendentes</h3>
+                            <p className="text-sm text-red-700 mt-1">
+                                Você tem {stats.overdueRoutines.length} rotina(s) de alta prioridade pendente(s) hoje.
+                            </p>
+                            <div className="mt-2 space-y-1">
+                                {stats.overdueRoutines.map(r => (
+                                    <div key={r.id} className="text-sm text-red-600">• {r.nome}</div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
+            {/* Cards de Estatísticas */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card className="md:col-span-2 lg:col-span-2 flex flex-col sm:flex-row items-center justify-around">
                     <ProgressCircle percentage={completionPercentage} />
                     <div className="text-center sm:text-left mt-4 sm:mt-0">
                         <h3 className="text-lg font-semibold text-gray-800">Resumo do Dia</h3>
-                        <p className="text-gray-600">{`Você concluiu ${completedToday.length} de ${totalToday} rotinas diárias.`}</p>
+                        <p className="text-gray-600">{`Você concluiu ${stats.completedToday.length} de ${stats.totalToday} rotinas diárias.`}</p>
                         <Button onClick={() => setPage('rotinas')} className="mt-4">
                             Ver Rotinas
                         </Button>
                     </div>
                 </Card>
-                <StatCard title="Pendentes Hoje" value={pendingToday.length} icon={Clock} colorClass="bg-yellow-500" />
-                <StatCard title="Concluídas Hoje" value={completedToday.length} icon={CheckCircle} colorClass="bg-green-500" />
+                <StatCard title="Pendentes Hoje" value={stats.pendingToday.length} icon={Clock} colorClass="bg-yellow-500" />
+                <StatCard title="Concluídas Hoje" value={stats.completedToday.length} icon={CheckCircle} colorClass="bg-green-500" />
             </div>
 
-            <div className="mt-8">
+            {/* Estatísticas Semanais e Mensais */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatCard 
+                    title="Execuções Esta Semana" 
+                    value={stats.executionsWeek} 
+                    icon={TrendingUp} 
+                    colorClass="bg-blue-500" 
+                />
+                <StatCard 
+                    title="Execuções Este Mês" 
+                    value={stats.executionsMonth} 
+                    icon={Activity} 
+                    colorClass="bg-purple-500" 
+                />
+                <StatCard 
+                    title="Tempo Médio (h)" 
+                    value={stats.avgCompletionTime} 
+                    icon={Clock} 
+                    colorClass="bg-indigo-500" 
+                />
+            </div>
+
+            {/* Gráficos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <SimplePieChart 
+                        data={categoryChartData} 
+                        title="Rotinas por Categoria"
+                    />
+                </Card>
+                <Card>
+                    <SimpleBarChart 
+                        data={weeklyExecutionsData.length > 0 ? weeklyExecutionsData : [{label: 'Nenhuma execução', value: 0}]} 
+                        title="Execuções por Categoria (Esta Semana)"
+                    />
+                </Card>
+            </div>
+
+            {/* Rotinas Pendentes */}
+            <div>
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Rotinas Pendentes para Hoje</h3>
-                {pendingToday.length > 0 ? (
+                {stats.pendingToday.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                       {pendingToday.map(routine => (
-                           <Card key={routine.id} className="flex justify-between items-center">
-                               <div>
-                                   <p className="font-semibold">{routine.nome}</p>
-                                   <p className="text-sm text-gray-500">{routine.categoria}</p>
+                       {stats.pendingToday.map(routine => (
+                           <Card key={routine.id} className="hover:shadow-lg transition-shadow">
+                               <div className="flex justify-between items-start mb-2">
+                                   <div className="flex-1">
+                                       <div className="flex items-center gap-2 mb-1">
+                                           <p className="font-semibold">{routine.nome}</p>
+                                           {routine.prioridade === 'alta' && (
+                                               <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">Alta</span>
+                                           )}
+                                       </div>
+                                       <p className="text-sm text-gray-500">{routine.categoria}</p>
+                                       {routine.responsavel && (
+                                           <p className="text-xs text-gray-400 mt-1">Resp: {routine.responsavel}</p>
+                                       )}
+                                   </div>
                                </div>
-                               <button onClick={() => setPage('rotinas')} className="text-blue-600 hover:underline text-sm font-semibold">
-                                   Executar
+                               <button 
+                                   onClick={() => setPage('rotinas')} 
+                                   className="w-full mt-2 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-semibold transition-colors"
+                               >
+                                   Executar Agora
                                </button>
                            </Card>
                        ))}
@@ -357,6 +700,7 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     const [foto, setFoto] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [checklistProgress, setChecklistProgress] = useState({});
 
     const handleFileChange = (e) => {
         if (e.target.files[0]) {
@@ -370,10 +714,28 @@ const RoutinesPage = ({ routines, executions, userData }) => {
         setFoto(null);
         setUploadProgress(0);
         setIsSubmitting(false);
+        setChecklistProgress({});
+    };
+
+    const toggleChecklistItem = (index) => {
+        setChecklistProgress(prev => ({
+            ...prev,
+            [index]: !prev[index]
+        }));
     };
 
     const handleSubmitExecution = async () => {
         if (!executingRoutine || isSubmitting) return;
+        
+        // Verificar se todos os itens do checklist foram marcados
+        if (executingRoutine.checklist && executingRoutine.checklist.length > 0) {
+            const allChecked = executingRoutine.checklist.every((_, index) => checklistProgress[index]);
+            if (!allChecked) {
+                alert("Por favor, complete todos os itens do checklist antes de finalizar.");
+                return;
+            }
+        }
+        
         setIsSubmitting(true);
 
         const executionData = {
@@ -382,7 +744,8 @@ const RoutinesPage = ({ routines, executions, userData }) => {
             responsavelId: userData.uid,
             responsavelNome: userData.nome,
             observacao: observacao,
-            fotoUrl: ''
+            fotoUrl: '',
+            checklistCompleted: executingRoutine.checklist || []
         };
 
         if (foto) {
@@ -498,8 +861,60 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                 })}
             </div>
 
-            <Modal isOpen={!!executingRoutine} onClose={closeAndResetModal} title={`Executar: ${executingRoutine?.nome}`}>
+            <Modal isOpen={!!executingRoutine} onClose={closeAndResetModal} title={`Executar: ${executingRoutine?.nome}`} size="lg">
                  <div className="space-y-4">
+                     {/* Checklist Interativo */}
+                     {executingRoutine?.checklist && executingRoutine.checklist.length > 0 && (
+                         <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-2">Checklist</label>
+                             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                                 {executingRoutine.checklist.map((item, index) => (
+                                     <div key={index} className="flex items-start gap-3 p-2 hover:bg-white rounded transition-colors">
+                                         <input
+                                             type="checkbox"
+                                             id={`checklist-${index}`}
+                                             checked={checklistProgress[index] || false}
+                                             onChange={() => toggleChecklistItem(index)}
+                                             className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                         />
+                                         <label 
+                                             htmlFor={`checklist-${index}`}
+                                             className={`flex-1 cursor-pointer ${checklistProgress[index] ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                                         >
+                                             {item}
+                                         </label>
+                                     </div>
+                                 ))}
+                                 <div className="mt-3 pt-3 border-t border-gray-200">
+                                     <div className="flex items-center justify-between text-sm">
+                                         <span className="text-gray-600">Progresso</span>
+                                         <span className="font-semibold text-blue-600">
+                                             {Object.values(checklistProgress).filter(Boolean).length} / {executingRoutine.checklist.length}
+                                         </span>
+                                     </div>
+                                     <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                                         <div 
+                                             className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                             style={{ 
+                                                 width: `${(Object.values(checklistProgress).filter(Boolean).length / executingRoutine.checklist.length) * 100}%` 
+                                             }}
+                                         />
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+                     )}
+
+                     {/* Instruções */}
+                     {executingRoutine?.instrucoes && (
+                         <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-2">Instruções</label>
+                             <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
+                                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{executingRoutine.instrucoes}</p>
+                             </div>
+                         </div>
+                     )}
+
                      <div>
                          <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
                          <textarea 
@@ -546,8 +961,10 @@ const RoutinesPage = ({ routines, executions, userData }) => {
 
 const HistoryPage = ({ executions, routines }) => {
     const [filterDate, setFilterDate] = useState('');
+    const [filterDateEnd, setFilterDateEnd] = useState('');
     const [filterUser, setFilterUser] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
+    const [filterRoutine, setFilterRoutine] = useState('');
 
     const routinesMap = useMemo(() => {
         return routines.reduce((acc, routine) => {
@@ -570,38 +987,104 @@ const HistoryPage = ({ executions, routines }) => {
                 const routine = routinesMap[exec.rotinaId];
                 if (!routine) return false;
 
-                const dateMatch = !filterDate || exec.dataHora.toDate().toISOString().startsWith(filterDate);
+                const execDate = exec.dataHora.toDate();
+                const dateMatch = !filterDate || execDate.toISOString().startsWith(filterDate);
+                const dateEndMatch = !filterDateEnd || execDate <= new Date(filterDateEnd + 'T23:59:59');
                 const userMatch = !filterUser || exec.responsavelNome === filterUser;
                 const categoryMatch = !filterCategory || routine.categoria === filterCategory;
+                const routineMatch = !filterRoutine || exec.rotinaId === filterRoutine;
 
-                return dateMatch && userMatch && categoryMatch;
+                return dateMatch && dateEndMatch && userMatch && categoryMatch && routineMatch;
             })
             .sort((a, b) => b.dataHora.toMillis() - a.dataHora.toMillis());
-    }, [executions, filterDate, filterUser, filterCategory, routinesMap]);
+    }, [executions, filterDate, filterDateEnd, filterUser, filterCategory, filterRoutine, routinesMap]);
+
+    const exportToCSV = () => {
+        const headers = ['Data/Hora', 'Rotina', 'Categoria', 'Responsável', 'Observação'];
+        const rows = filteredExecutions.map(exec => {
+            const routine = routinesMap[exec.rotinaId];
+            return [
+                exec.dataHora.toDate().toLocaleString('pt-BR'),
+                routine?.nome || 'N/A',
+                routine?.categoria || 'N/A',
+                exec.responsavelNome,
+                exec.observacao || ''
+            ];
+        });
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `relatorio_rotinas_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+    };
+
+    const clearFilters = () => {
+        setFilterDate('');
+        setFilterDateEnd('');
+        setFilterUser('');
+        setFilterCategory('');
+        setFilterRoutine('');
+    };
 
     return (
         <div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Histórico de Execuções</h2>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Histórico de Execuções</h2>
+                <Button onClick={exportToCSV} variant="secondary">
+                    <Download className="w-5 h-5" />
+                    Exportar CSV
+                </Button>
+            </div>
             
             <Card className="mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Data</label>
-                        <Input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
+                            <Input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Data Fim</label>
+                            <Input type="date" value={filterDateEnd} onChange={e => setFilterDateEnd(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Técnico</label>
+                            <select value={filterUser} onChange={e => setFilterUser(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="">Todos</option>
+                                {usersList.map(name => <option key={name} value={name}>{name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Categoria</label>
+                            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="">Todas</option>
+                                {categoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Rotina</label>
+                            <select value={filterRoutine} onChange={e => setFilterRoutine(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="">Todas</option>
+                                {routines.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex items-end">
+                            <Button onClick={clearFilters} variant="secondary" className="w-full">
+                                <X className="w-4 h-4" />
+                                Limpar Filtros
+                            </Button>
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Técnico</label>
-                        <select value={filterUser} onChange={e => setFilterUser(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option value="">Todos</option>
-                            {usersList.map(name => <option key={name} value={name}>{name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Categoria</label>
-                        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option value="">Todas</option>
-                            {categoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
+                    <div className="flex items-center justify-between pt-4 border-t">
+                        <span className="text-sm text-gray-600">
+                            Mostrando <strong>{filteredExecutions.length}</strong> de <strong>{executions.length}</strong> registros
+                        </span>
                     </div>
                 </div>
             </Card>
@@ -827,7 +1310,12 @@ const AdminPage = ({ routines, users }) => {
         descricao: '',
         categoria: 'Rede',
         frequencia: 'diaria',
+        prioridade: 'media',
+        responsavel: '',
+        instrucoes: '',
+        checklist: []
     });
+    const [checklistInput, setChecklistInput] = useState('');
 
     const openModalForNew = () => {
         setCurrentRoutine(null);
@@ -836,7 +1324,12 @@ const AdminPage = ({ routines, users }) => {
             descricao: '',
             categoria: 'Rede',
             frequencia: 'diaria',
+            prioridade: 'media',
+            responsavel: '',
+            instrucoes: '',
+            checklist: []
         });
+        setChecklistInput('');
         setIsModalOpen(true);
     };
     
@@ -847,13 +1340,35 @@ const AdminPage = ({ routines, users }) => {
             descricao: routine.descricao,
             categoria: routine.categoria,
             frequencia: routine.frequencia,
+            prioridade: routine.prioridade || 'media',
+            responsavel: routine.responsavel || '',
+            instrucoes: routine.instrucoes || '',
+            checklist: routine.checklist || []
         });
+        setChecklistInput('');
         setIsModalOpen(true);
     };
     
     const handleFormChange = (e) => {
         const { name, value } = e.target;
         setFormState(prev => ({ ...prev, [name]: value }));
+    };
+
+    const addChecklistItem = () => {
+        if (checklistInput.trim()) {
+            setFormState(prev => ({
+                ...prev,
+                checklist: [...prev.checklist, checklistInput.trim()]
+            }));
+            setChecklistInput('');
+        }
+    };
+
+    const removeChecklistItem = (index) => {
+        setFormState(prev => ({
+            ...prev,
+            checklist: prev.checklist.filter((_, i) => i !== index)
+        }));
     };
 
     const handleFormSubmit = async () => {
@@ -984,38 +1499,106 @@ const AdminPage = ({ routines, users }) => {
                 </Card>
             )}
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentRoutine ? 'Editar Rotina' : 'Nova Rotina'}>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentRoutine ? 'Editar Rotina' : 'Nova Rotina'} size="lg">
                 <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-                        <Input name="nome" value={formState.nome} onChange={handleFormChange} placeholder="Ex: Verificar Backup Servidor X" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+                            <Input name="nome" value={formState.nome} onChange={handleFormChange} placeholder="Ex: Verificar Backup Servidor X" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
+                            <select name="categoria" value={formState.categoria} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="Rede">Rede</option>
+                                <option value="Computadores">Computadores</option>
+                                <option value="Impressoras">Impressoras</option>
+                                <option value="Backup">Backup</option>
+                                <option value="Servidores">Servidores</option>
+                                <option value="Segurança">Segurança</option>
+                                <option value="Consultórios">Consultórios</option>
+                                <option value="Outros">Outros</option>
+                            </select>
+                        </div>
                     </div>
+                    
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                         <textarea name="descricao" value={formState.descricao} onChange={handleFormChange} rows="2" className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Detalhes da tarefa..."></textarea>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                        <select name="categoria" value={formState.categoria} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option value="Rede">Rede</option>
-                            <option value="Computadores">Computadores</option>
-                            <option value="Impressoras">Impressoras</option>
-                            <option value="Backup">Backup</option>
-                            <option value="Servidores">Servidores</option>
-                            <option value="Outros">Outros</option>
-                        </select>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
+                            <select name="frequencia" value={formState.frequencia} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="diaria">Diária</option>
+                                <option value="semanal">Semanal</option>
+                                <option value="mensal">Mensal</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                            <select name="prioridade" value={formState.prioridade} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="baixa">Baixa</option>
+                                <option value="media">Média</option>
+                                <option value="alta">Alta</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Responsável</label>
+                            <Input name="responsavel" value={formState.responsavel} onChange={handleFormChange} placeholder="Nome do responsável" />
+                        </div>
                     </div>
+
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
-                        <select name="frequencia" value={formState.frequencia} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option value="diaria">Diária</option>
-                            <option value="semanal">Semanal</option>
-                            <option value="mensal">Mensal</option>
-                        </select>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Instruções Específicas</label>
+                        <textarea 
+                            name="instrucoes" 
+                            value={formState.instrucoes} 
+                            onChange={handleFormChange} 
+                            rows="3" 
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                            placeholder="Ex: Verificar nível de tinta da HP M402, conferir temperatura do servidor..."
+                        ></textarea>
                     </div>
-                    <div className="flex justify-end gap-2 pt-4">
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Checklist</label>
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <Input 
+                                    value={checklistInput} 
+                                    onChange={e => setChecklistInput(e.target.value)}
+                                    onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addChecklistItem())}
+                                    placeholder="Digite um item e pressione Enter ou clique em Adicionar"
+                                    className="flex-1"
+                                />
+                                <Button type="button" onClick={addChecklistItem} variant="secondary">
+                                    <Plus className="w-4 h-4" />
+                                    Adicionar
+                                </Button>
+                            </div>
+                            {formState.checklist.length > 0 && (
+                                <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                                    {formState.checklist.map((item, index) => (
+                                        <div key={index} className="flex items-center justify-between p-2 bg-white rounded">
+                                            <span className="text-sm text-gray-700">{item}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={() => removeChecklistItem(index)} 
+                                                className="text-red-600 hover:text-red-800"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-4 border-t">
                         <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleFormSubmit}>Salvar</Button>
+                        <Button onClick={handleFormSubmit}>Salvar Rotina</Button>
                     </div>
                 </div>
             </Modal>
@@ -1105,6 +1688,8 @@ export default function App() {
         setPage('dashboard');
     };
 
+    const notifications = useNotifications(routines, executions);
+
     if (authLoading || userDataLoading) {
         return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><Spinner /></div>;
     }
@@ -1119,7 +1704,7 @@ export default function App() {
         }
         switch (page) {
             case 'dashboard':
-                return <DashboardPage routines={routines} executions={executions} setPage={setPage} />;
+                return <DashboardPage routines={routines} executions={executions} setPage={setPage} users={users} />;
             case 'rotinas':
                 return <RoutinesPage routines={routines} executions={executions} userData={userData} />;
             case 'historico':
@@ -1129,7 +1714,7 @@ export default function App() {
             case 'admin':
                 return userData.tipo === 'admin' ? <AdminPage routines={routines} users={users} /> : <p>Acesso negado.</p>;
             default:
-                return <DashboardPage routines={routines} executions={executions} setPage={setPage} />;
+                return <DashboardPage routines={routines} executions={executions} setPage={setPage} users={users} />;
         }
     };
     
@@ -1177,6 +1762,24 @@ export default function App() {
             </aside>
 
             <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Header com Notificações */}
+                <header className="hidden md:flex items-center justify-between px-8 py-4 bg-white border-b">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-lg font-semibold text-gray-800">
+                            {navItems.find(item => item.page === page)?.name || 'Dashboard'}
+                        </h2>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <NotificationBell notifications={notifications} />
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-sm">
+                                {userData.nome.charAt(0)}
+                            </div>
+                            <span className="text-sm font-medium text-gray-700">{userData.nome}</span>
+                        </div>
+                    </div>
+                </header>
+                
                 <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6 md:p-8">
                     {renderPage()}
                 </main>
