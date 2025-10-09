@@ -102,13 +102,35 @@ const useUserData = (user) => {
             setLoading(false);
         });
 
-        return () => unsubscribe();
     }, [user]);
 
     return { userData, loading };
 };
 
-// --- Componentes Reutilizáveis ---
+// --- Componentes Básicos ---
+const Logo = ({ size = 'md', className = '' }) => {
+    const sizes = {
+        sm: 'h-8',
+        md: 'h-12',
+        lg: 'h-16'
+    };
+    
+    // Você pode substituir este SVG pela sua logo ou usar uma imagem
+    // Para usar uma imagem, substitua o SVG por: <img src="/logo.png" alt="Logo" className={`${sizes[size]} ${className}`} />
+    return (
+        <svg className={`${sizes[size]} ${className}`} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Ícone de checklist */}
+            <rect x="5" y="10" width="35" height="40" rx="4" fill="#3B82F6" />
+            <path d="M15 25 L20 30 L30 20" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M15 38 L20 43 L30 33" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            
+            {/* Texto */}
+            <text x="50" y="30" fontFamily="Arial, sans-serif" fontSize="18" fontWeight="bold" fill="#1E40AF">Rotinas</text>
+            <text x="50" y="48" fontFamily="Arial, sans-serif" fontSize="14" fill="#3B82F6">TI Manager</text>
+        </svg>
+    );
+};
+
 const Spinner = () => (
     <div className="flex justify-center items-center h-full w-full">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -422,7 +444,9 @@ const LoginPage = ({ setPage }) => {
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-blue-600">Rotinas TI HPAES</h1>
+                    <div className="flex justify-center mb-4">
+                        <Logo size="lg" />
+                    </div>
                     <p className="text-gray-600 mt-2">{isLogin ? 'Acesse sua conta' : 'Crie uma nova conta'}</p>
                 </div>
                 <Card>
@@ -1757,8 +1781,8 @@ export default function App() {
         <div className="flex h-screen bg-gray-100 font-sans">
             {/* Sidebar para Desktop */}
             <aside className="hidden md:flex w-64 flex-col bg-white border-r">
-                <div className="h-16 flex items-center justify-center border-b">
-                    <h1 className="text-xl font-bold text-blue-600">Rotinas TI HPAES</h1>
+                <div className="h-16 flex items-center justify-center border-b px-4">
+                    <Logo size="md" />
                 </div>
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
                     {navItems.map(item => (
