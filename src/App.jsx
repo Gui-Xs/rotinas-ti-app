@@ -594,61 +594,6 @@ const SimplePieChart = ({ data, title }) => {
     );
 };
 
-// Hook para notificações
-const useNotifications = (routines, executions) => {
-    const [notifications, setNotifications] = useState([]);
-
-    useEffect(() => {
-        const checkNotifications = () => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const startOfToday = Timestamp.fromDate(today);
-
-            const newNotifications = [];
-            const completedTodayIds = new Set(
-                executions
-                    .filter(e => e.dataHora >= startOfToday)
-                    .map(e => e.rotinaId)
-            );
-
-            // Verificar rotinas diárias pendentes
-            const dailyRoutines = routines.filter(r => r.frequencia === 'diaria');
-            const pendingDaily = dailyRoutines.filter(r => !completedTodayIds.has(r.id));
-
-            if (pendingDaily.length > 0) {
-                newNotifications.push({
-                    id: 'daily-pending',
-                    type: 'warning',
-                    title: 'Rotinas Diárias Pendentes',
-                    message: `Você tem ${pendingDaily.length} rotina(s) diária(s) pendente(s).`,
-                    timestamp: new Date()
-                });
-            }
-
-            // Verificar rotinas de alta prioridade
-            const highPriority = pendingDaily.filter(r => r.prioridade === 'alta');
-            if (highPriority.length > 0) {
-                newNotifications.push({
-                    id: 'high-priority',
-                    type: 'error',
-                    title: 'Atenção: Rotinas Críticas!',
-                    message: `${highPriority.length} rotina(s) de alta prioridade precisa(m) de atenção.`,
-                    timestamp: new Date()
-                });
-            }
-
-            setNotifications(newNotifications);
-        };
-
-        checkNotifications();
-        const interval = setInterval(checkNotifications, 60000); // Verificar a cada minuto
-
-        return () => clearInterval(interval);
-    }, [routines, executions]);
-
-    return notifications;
-};
-
 // Componente de Notificações
 const NotificationBell = ({ unreadCount, onClick }) => {
     return (
@@ -3407,8 +3352,6 @@ export default function App() {
         await signOut(auth);
         setPage('dashboard');
     };
-
-    const notifications = useNotifications(routines, executions);
 
     if (authLoading || userDataLoading) {
         return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><Spinner /></div>;
