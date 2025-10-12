@@ -72,7 +72,14 @@ import {
     UserCheck,
     UserCog,
     List,
-    Lock
+    Lock,
+    BellRing,
+    CalendarClock,
+    FileCheck,
+    Send,
+    AlertOctagon,
+    CheckSquare,
+    GitBranch
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
@@ -148,6 +155,109 @@ const logActivity = async (userId, userName, action, details = {}) => {
     }
 };
 
+// --- Funções de Agendamento e Notificações ---
+const createNotification = async (userId, userName, type, message, routineId = null, priority = 'normal') => {
+    try {
+        await addDoc(collection(db, `/artifacts/${appId}/notifications`), {
+            userId,
+            userName,
+            type, // 'routine_pending', 'routine_overdue', 'routine_assigned', 'system'
+            message,
+            routineId,
+            priority, // 'low', 'normal', 'high', 'urgent'
+            read: false,
+            timestamp: Timestamp.now(),
+            createdAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Erro ao criar notificação:', error);
+    }
+};
+
+const scheduleNextExecution = async (routine, lastExecution) => {
+    try {
+        const nextDate = new Date();
+        
+        switch(routine.frequencia) {
+            case 'diaria':
+                nextDate.setDate(nextDate.getDate() + 1);
+                break;
+            case 'semanal':
+                nextDate.setDate(nextDate.getDate() + 7);
+                break;
+            case 'mensal':
+                nextDate.setMonth(nextDate.getMonth() + 1);
+                break;
+        }
+        
+        // Criar agendamento
+        await addDoc(collection(db, `/artifacts/${appId}/scheduledRoutines`), {
+            routineId: routine.id,
+            routineName: routine.nome,
+            scheduledFor: Timestamp.fromDate(nextDate),
+            status: 'pending', // 'pending', 'completed', 'overdue'
+            assignedTechnicians: routine.assignedTechnicians || [],
+            createdAt: Timestamp.now()
+        });
+    } catch (error) {
+        console.error('Erro ao agendar próxima execução:', error);
+    }
+};
+
+const checkOverdueRoutines = async (routines, executions, users) => {
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (const routine of routines) {
+        const lastExecution = executions
+            .filter(e => e.rotinaId === routine.id)
+            .sort((a, b) => b.dataHora.toMillis() - a.dataHora.toMillis())[0];
+        
+        let isOverdue = false;
+        
+        if (!lastExecution) {
+            isOverdue = true;
+        } else {
+            const lastExecDate = lastExecution.dataHora.toDate();
+            
+            switch(routine.frequencia) {
+                case 'diaria':
+                    isOverdue = lastExecDate < today;
+                    break;
+                case 'semanal':
+                    const weekAgo = new Date(today);
+                    weekAgo.setDate(today.getDate() - 7);
+                    isOverdue = lastExecDate < weekAgo;
+                    break;
+                case 'mensal':
+                    const monthAgo = new Date(today);
+                    monthAgo.setMonth(today.getMonth() - 1);
+                    isOverdue = lastExecDate < monthAgo;
+                    break;
+            }
+        }
+        
+        if (isOverdue) {
+            // Notificar técnicos atribuídos ou todos
+            const targetUsers = routine.assignedTechnicians && routine.assignedTechnicians.length > 0
+                ? users.filter(u => routine.assignedTechnicians.includes(u.uid))
+                : users.filter(u => u.tipo !== 'admin');
+            
+            for (const user of targetUsers) {
+                await createNotification(
+                    user.uid,
+                    user.nome,
+                    'routine_overdue',
+                    `A rotina "${routine.nome}" está atrasada!`,
+                    routine.id,
+                    routine.prioridade === 'alta' ? 'urgent' : 'high'
+                );
+            }
+        }
+    }
+};
+
 // --- Hooks Personalizados ---
 const useUserData = (user) => {
     const [userData, setUserData] = useState(null);
@@ -176,6 +286,54 @@ const useUserData = (user) => {
     }, [user]);
 
     return { userData, loading };
+};
+
+const useNotifications = (userId) => {
+    const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    useEffect(() => {
+        if (!userId) return;
+
+        const notificationsRef = collection(db, `/artifacts/${appId}/notifications`);
+        const q = query(notificationsRef, where('userId', '==', userId));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const notifs = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+            
+            setNotifications(notifs);
+            setUnreadCount(notifs.filter(n => !n.read).length);
+        });
+
+        return () => unsubscribe();
+    }, [userId]);
+
+    const markAsRead = async (notificationId) => {
+        try {
+            await updateDoc(doc(db, `/artifacts/${appId}/notifications`, notificationId), {
+                read: true
+            });
+        } catch (error) {
+            console.error('Erro ao marcar notificação como lida:', error);
+        }
+    };
+
+    const markAllAsRead = async () => {
+        try {
+            const unreadNotifs = notifications.filter(n => !n.read);
+            for (const notif of unreadNotifs) {
+                await updateDoc(doc(db, `/artifacts/${appId}/notifications`, notif.id), {
+                    read: true
+                });
+            }
+        } catch (error) {
+            console.error('Erro ao marcar todas como lidas:', error);
+        }
+    };
+
+    return { notifications, unreadCount, markAsRead, markAllAsRead };
 };
 
 // --- Componentes Básicos ---
@@ -253,6 +411,90 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
                 </div>
                 <div className="p-4 max-h-[70vh] overflow-y-auto">
                     {children}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Componente de Painel de Notificações
+const NotificationsPanel = ({ notifications, unreadCount, markAsRead, markAllAsRead, onClose }) => {
+    const getPriorityColor = (priority) => {
+        switch(priority) {
+            case 'urgent': return 'bg-red-100 text-red-800 border-red-200';
+            case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
+            case 'normal': return 'bg-blue-100 text-blue-800 border-blue-200';
+            case 'low': return 'bg-gray-100 text-gray-800 border-gray-200';
+            default: return 'bg-blue-100 text-blue-800 border-blue-200';
+        }
+    };
+
+    const getTypeIcon = (type) => {
+        switch(type) {
+            case 'routine_overdue': return <AlertOctagon className="w-5 h-5" />;
+            case 'routine_pending': return <Clock className="w-5 h-5" />;
+            case 'routine_assigned': return <CheckSquare className="w-5 h-5" />;
+            default: return <BellRing className="w-5 h-5" />;
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end">
+            <div className="bg-white w-full max-w-md h-full shadow-xl flex flex-col">
+                <div className="flex justify-between items-center p-4 border-b">
+                    <div>
+                        <h3 className="text-xl font-semibold text-gray-800">Notificações</h3>
+                        {unreadCount > 0 && (
+                            <p className="text-sm text-gray-500">{unreadCount} não lida{unreadCount > 1 ? 's' : ''}</p>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {unreadCount > 0 && (
+                            <button
+                                onClick={markAllAsRead}
+                                className="text-sm text-blue-600 hover:text-blue-800"
+                            >
+                                Marcar todas como lidas
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {notifications.length > 0 ? notifications.map(notif => (
+                        <div
+                            key={notif.id}
+                            className={`p-3 rounded-lg border-l-4 cursor-pointer transition-all ${
+                                notif.read ? 'bg-gray-50 border-gray-300' : getPriorityColor(notif.priority)
+                            }`}
+                            onClick={() => !notif.read && markAsRead(notif.id)}
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className={notif.read ? 'text-gray-400' : ''}>
+                                    {getTypeIcon(notif.type)}
+                                </div>
+                                <div className="flex-1">
+                                    <p className={`text-sm ${notif.read ? 'text-gray-600' : 'text-gray-800 font-semibold'}`}>
+                                        {notif.message}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {notif.timestamp?.toDate().toLocaleString('pt-BR')}
+                                    </p>
+                                </div>
+                                {!notif.read && (
+                                    <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-1"></div>
+                                )}
+                            </div>
+                        </div>
+                    )) : (
+                        <div className="text-center py-12 text-gray-500">
+                            <BellRing className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                            <p>Nenhuma notificação</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -408,54 +650,20 @@ const useNotifications = (routines, executions) => {
 };
 
 // Componente de Notificações
-const NotificationBell = ({ notifications }) => {
-    const [showNotifications, setShowNotifications] = useState(false);
-
+const NotificationBell = ({ unreadCount, onClick }) => {
     return (
         <div className="relative">
             <button 
-                onClick={() => setShowNotifications(!showNotifications)}
+                onClick={onClick}
                 className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
             >
                 <Bell className="w-6 h-6" />
-                {notifications.length > 0 && (
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
                 )}
             </button>
-
-            {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border z-50">
-                    <div className="p-4 border-b">
-                        <h3 className="font-semibold text-gray-800">Notificações</h3>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                        {notifications.length > 0 ? (
-                            notifications.map(notif => (
-                                <div key={notif.id} className={`p-4 border-b hover:bg-gray-50 ${
-                                    notif.type === 'error' ? 'bg-red-50' : 
-                                    notif.type === 'warning' ? 'bg-yellow-50' : 'bg-blue-50'
-                                }`}>
-                                    <div className="flex items-start gap-3">
-                                        <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                                            notif.type === 'error' ? 'text-red-600' : 
-                                            notif.type === 'warning' ? 'text-yellow-600' : 'text-blue-600'
-                                        }`} />
-                                        <div className="flex-1">
-                                            <h4 className="font-semibold text-sm text-gray-800">{notif.title}</h4>
-                                            <p className="text-sm text-gray-600 mt-1">{notif.message}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="p-8 text-center text-gray-500">
-                                <Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                                <p>Nenhuma notificação</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
@@ -898,6 +1106,9 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                         }
                     );
                     
+                    // Agendar próxima execução automaticamente
+                    await scheduleNextExecution(executingRoutine, executionData);
+                    
                     closeAndResetModal();
                 }
             );
@@ -915,6 +1126,9 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                     comFoto: false
                 }
             );
+            
+            // Agendar próxima execução automaticamente
+            await scheduleNextExecution(executingRoutine, executionData);
             
             closeAndResetModal();
         }
@@ -2621,6 +2835,300 @@ const ReportsPage = ({ executions, routines, users }) => {
     );
 };
 
+// --- Página de Relatórios Automáticos ---
+const AutoReportsPage = ({ executions, routines, users }) => {
+    const [reportPeriod, setReportPeriod] = useState('today');
+    const [generating, setGenerating] = useState(false);
+
+    const generateReport = useMemo(() => {
+        const now = new Date();
+        let startDate = new Date();
+        
+        switch(reportPeriod) {
+            case 'today':
+                startDate.setHours(0, 0, 0, 0);
+                break;
+            case 'week':
+                startDate.setDate(now.getDate() - 7);
+                break;
+            case 'month':
+                startDate.setMonth(now.getMonth() - 1);
+                break;
+        }
+        
+        const periodExecutions = executions.filter(e => e.dataHora.toDate() >= startDate);
+        
+        // Rotinas concluídas
+        const completedRoutines = periodExecutions.map(exec => {
+            const routine = routines.find(r => r.id === exec.rotinaId);
+            return {
+                ...exec,
+                routine
+            };
+        });
+        
+        // Rotinas pendentes
+        const pendingRoutines = routines.filter(routine => {
+            const lastExec = executions
+                .filter(e => e.rotinaId === routine.id)
+                .sort((a, b) => b.dataHora.toMillis() - a.dataHora.toMillis())[0];
+            
+            if (!lastExec) return true;
+            
+            const lastExecDate = lastExec.dataHora.toDate();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            switch(routine.frequencia) {
+                case 'diaria':
+                    return lastExecDate < today;
+                case 'semanal':
+                    const weekAgo = new Date(today);
+                    weekAgo.setDate(today.getDate() - 7);
+                    return lastExecDate < weekAgo;
+                case 'mensal':
+                    const monthAgo = new Date(today);
+                    monthAgo.setMonth(today.getMonth() - 1);
+                    return lastExecDate < monthAgo;
+                default:
+                    return false;
+            }
+        });
+        
+        // Problemas encontrados (observações com palavras-chave)
+        const problemKeywords = ['problema', 'erro', 'falha', 'não', 'defeito', 'quebrado'];
+        const issues = periodExecutions.filter(exec => {
+            const obs = (exec.observacao || '').toLowerCase();
+            return problemKeywords.some(keyword => obs.includes(keyword));
+        });
+        
+        // Performance por técnico
+        const technicianPerformance = {};
+        periodExecutions.forEach(exec => {
+            if (!technicianPerformance[exec.responsavelId]) {
+                technicianPerformance[exec.responsavelId] = {
+                    name: exec.responsavelNome,
+                    completed: 0,
+                    withPhoto: 0
+                };
+            }
+            technicianPerformance[exec.responsavelId].completed++;
+            if (exec.fotoUrl) {
+                technicianPerformance[exec.responsavelId].withPhoto++;
+            }
+        });
+        
+        return {
+            period: reportPeriod,
+            startDate,
+            endDate: now,
+            totalCompleted: periodExecutions.length,
+            totalPending: pendingRoutines.length,
+            completedRoutines,
+            pendingRoutines,
+            issues,
+            technicianPerformance: Object.values(technicianPerformance)
+        };
+    }, [reportPeriod, executions, routines]);
+
+    const downloadReport = () => {
+        setGenerating(true);
+        
+        const report = generateReport;
+        const reportText = `
+RELATÓRIO AUTOMÁTICO DE ROTINAS
+Período: ${report.period === 'today' ? 'Hoje' : report.period === 'week' ? 'Última Semana' : 'Último Mês'}
+Data: ${report.startDate.toLocaleDateString('pt-BR')} até ${report.endDate.toLocaleDateString('pt-BR')}
+
+═══════════════════════════════════════════════════════════
+
+RESUMO GERAL
+- Total de rotinas concluídas: ${report.totalCompleted}
+- Total de rotinas pendentes: ${report.totalPending}
+- Taxa de conclusão: ${((report.totalCompleted / (report.totalCompleted + report.totalPending)) * 100).toFixed(1)}%
+
+═══════════════════════════════════════════════════════════
+
+ROTINAS CONCLUÍDAS (${report.completedRoutines.length})
+${report.completedRoutines.map((exec, i) => `
+${i + 1}. ${exec.routine?.nome || 'Rotina removida'}
+   - Executado por: ${exec.responsavelNome}
+   - Data: ${exec.dataHora.toDate().toLocaleString('pt-BR')}
+   - Observação: ${exec.observacao || 'Nenhuma'}
+   - Foto: ${exec.fotoUrl ? 'Sim' : 'Não'}
+`).join('')}
+
+═══════════════════════════════════════════════════════════
+
+ROTINAS PENDENTES (${report.pendingRoutines.length})
+${report.pendingRoutines.map((routine, i) => `
+${i + 1}. ${routine.nome}
+   - Categoria: ${routine.categoria}
+   - Frequência: ${routine.frequencia}
+   - Prioridade: ${routine.prioridade}
+`).join('')}
+
+═══════════════════════════════════════════════════════════
+
+PROBLEMAS ENCONTRADOS (${report.issues.length})
+${report.issues.map((exec, i) => `
+${i + 1}. ${routines.find(r => r.id === exec.rotinaId)?.nome || 'Rotina removida'}
+   - Relatado por: ${exec.responsavelNome}
+   - Data: ${exec.dataHora.toDate().toLocaleString('pt-BR')}
+   - Descrição: ${exec.observacao}
+`).join('')}
+
+═══════════════════════════════════════════════════════════
+
+PERFORMANCE POR TÉCNICO
+${report.technicianPerformance.map((tech, i) => `
+${i + 1}. ${tech.name}
+   - Rotinas concluídas: ${tech.completed}
+   - Com evidência fotográfica: ${tech.withPhoto} (${((tech.withPhoto / tech.completed) * 100).toFixed(1)}%)
+`).join('')}
+
+═══════════════════════════════════════════════════════════
+
+Relatório gerado automaticamente em ${new Date().toLocaleString('pt-BR')}
+        `.trim();
+        
+        const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `relatorio-${reportPeriod}-${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setTimeout(() => setGenerating(false), 1000);
+    };
+
+    const report = generateReport;
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h2 className="text-2xl font-bold text-gray-800">Relatórios Automáticos</h2>
+                <div className="flex gap-2">
+                    <select
+                        value={reportPeriod}
+                        onChange={e => setReportPeriod(e.target.value)}
+                        className="border border-gray-300 rounded-lg px-4 py-2"
+                    >
+                        <option value="today">Hoje</option>
+                        <option value="week">Última Semana</option>
+                        <option value="month">Último Mês</option>
+                    </select>
+                    <Button onClick={downloadReport} disabled={generating}>
+                        <Download className="w-4 h-4" />
+                        {generating ? 'Gerando...' : 'Baixar Relatório'}
+                    </Button>
+                </div>
+            </div>
+
+            {/* Resumo */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <Card>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-green-100 rounded-full">
+                            <CheckCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Concluídas</p>
+                            <p className="text-2xl font-bold text-gray-800">{report.totalCompleted}</p>
+                        </div>
+                    </div>
+                </Card>
+
+                <Card>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-yellow-100 rounded-full">
+                            <Clock className="w-6 h-6 text-yellow-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Pendentes</p>
+                            <p className="text-2xl font-bold text-gray-800">{report.totalPending}</p>
+                        </div>
+                    </div>
+                </Card>
+
+                <Card>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-red-100 rounded-full">
+                            <AlertTriangle className="w-6 h-6 text-red-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Problemas</p>
+                            <p className="text-2xl font-bold text-gray-800">{report.issues.length}</p>
+                        </div>
+                    </div>
+                </Card>
+
+                <Card>
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-blue-100 rounded-full">
+                            <TrendingUp className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Taxa de Conclusão</p>
+                            <p className="text-2xl font-bold text-gray-800">
+                                {((report.totalCompleted / (report.totalCompleted + report.totalPending)) * 100).toFixed(0)}%
+                            </p>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Detalhes */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Problemas Encontrados */}
+                {report.issues.length > 0 && (
+                    <Card>
+                        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-red-600" />
+                            Problemas Encontrados
+                        </h3>
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                            {report.issues.map((exec, index) => (
+                                <div key={index} className="p-3 bg-red-50 rounded-lg border border-red-200">
+                                    <p className="font-semibold text-gray-800">
+                                        {routines.find(r => r.id === exec.rotinaId)?.nome || 'Rotina removida'}
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">{exec.observacao}</p>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        {exec.responsavelNome} • {exec.dataHora.toDate().toLocaleDateString('pt-BR')}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+                )}
+
+                {/* Performance por Técnico */}
+                <Card>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Performance por Técnico</h3>
+                    <div className="space-y-3">
+                        {report.technicianPerformance.map((tech, index) => (
+                            <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                                <div className="flex justify-between items-center mb-2">
+                                    <p className="font-semibold text-gray-800">{tech.name}</p>
+                                    <span className="text-2xl font-bold text-blue-600">{tech.completed}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <Camera className="w-4 h-4" />
+                                    <span>{tech.withPhoto} com foto ({((tech.withPhoto / tech.completed) * 100).toFixed(0)}%)</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
 // --- Página de Logs de Atividades ---
 const ActivityLogsPage = () => {
     const [logs, setLogs] = useState([]);
@@ -2827,6 +3335,8 @@ export default function App() {
     const [executions, setExecutions] = useState([]);
     const [users, setUsers] = useState([]);
     const [dataLoading, setDataLoading] = useState(true);
+    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(userData?.uid);
+    const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
     
     useEffect(() => {
       const performAuth = async () => {
@@ -2923,6 +3433,8 @@ export default function App() {
                 return <PrintersPage />;
             case 'relatorios':
                 return <ReportsPage executions={executions} routines={routines} users={users} />;
+            case 'auto-reports':
+                return <AutoReportsPage executions={executions} routines={routines} users={users} />;
             case 'logs':
                 return hasPermission(userData?.tipo, 'canViewLogs') ? <ActivityLogsPage /> : <p className="text-center text-gray-600 py-8">Acesso negado. Apenas administradores podem visualizar logs.</p>;
             case 'admin':
@@ -2938,6 +3450,7 @@ export default function App() {
         { name: 'Histórico', icon: History, page: 'historico' },
         { name: 'Impressoras', icon: Printer, page: 'impressoras' },
         { name: 'Relatórios', icon: BarChart3, page: 'relatorios' },
+        { name: 'Relatórios Auto', icon: FileCheck, page: 'auto-reports' },
     ];
     
     if (userData && userData.tipo === 'admin') {
@@ -2986,7 +3499,10 @@ export default function App() {
                         </h2>
                     </div>
                     <div className="flex items-center gap-4">
-                        <NotificationBell notifications={notifications} />
+                        <NotificationBell 
+                            unreadCount={unreadCount} 
+                            onClick={() => setShowNotificationsPanel(true)} 
+                        />
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-sm">
                                 {userData.nome.charAt(0)}
@@ -3000,6 +3516,17 @@ export default function App() {
                     {renderPage()}
                 </main>
             </div>
+            
+            {/* Painel de Notificações */}
+            {showNotificationsPanel && (
+                <NotificationsPanel
+                    notifications={notifications}
+                    unreadCount={unreadCount}
+                    markAsRead={markAsRead}
+                    markAllAsRead={markAllAsRead}
+                    onClose={() => setShowNotificationsPanel(false)}
+                />
+            )}
             
              {/* Bottom Nav para Mobile */}
              <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg flex justify-around">
