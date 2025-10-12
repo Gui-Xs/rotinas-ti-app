@@ -67,7 +67,12 @@ import {
     Paperclip,
     Eye,
     Award,
-    TrendingDown
+    TrendingDown,
+    Shield,
+    UserCheck,
+    UserCog,
+    List,
+    Lock
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
@@ -85,6 +90,63 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+// --- Funções de Permissões ---
+const ROLES = {
+    ADMIN: 'admin',
+    TECNICO: 'tecnico',
+    ESTAGIARIO: 'estagiario'
+};
+
+const PERMISSIONS = {
+    [ROLES.ADMIN]: {
+        canManageUsers: true,
+        canManageRoutines: true,
+        canManagePrinters: true,
+        canExecuteRoutines: true,
+        canViewReports: true,
+        canViewLogs: true,
+        canAssignRoutines: true
+    },
+    [ROLES.TECNICO]: {
+        canManageUsers: false,
+        canManageRoutines: false,
+        canManagePrinters: false,
+        canExecuteRoutines: true,
+        canViewReports: true,
+        canViewLogs: false,
+        canAssignRoutines: false
+    },
+    [ROLES.ESTAGIARIO]: {
+        canManageUsers: false,
+        canManageRoutines: false,
+        canManagePrinters: false,
+        canExecuteRoutines: true,
+        canViewReports: false,
+        canViewLogs: false,
+        canAssignRoutines: false
+    }
+};
+
+const hasPermission = (userRole, permission) => {
+    return PERMISSIONS[userRole]?.[permission] || false;
+};
+
+// --- Funções de Log de Atividades ---
+const logActivity = async (userId, userName, action, details = {}) => {
+    try {
+        await addDoc(collection(db, `/artifacts/${appId}/activityLogs`), {
+            userId,
+            userName,
+            action,
+            details,
+            timestamp: Timestamp.now(),
+            createdAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Erro ao registrar log:', error);
+    }
+};
 
 // --- Hooks Personalizados ---
 const useUserData = (user) => {
@@ -823,11 +885,37 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                     executionData.fotoUrl = downloadURL;
                     await addDoc(collection(db, `/artifacts/${appId}/public/data/execucoes`), executionData);
+                    
+                    // Registrar log de atividade
+                    await logActivity(
+                        userData.uid,
+                        userData.nome,
+                        'EXECUCAO_ROTINA',
+                        {
+                            rotinaId: executingRoutine.id,
+                            rotinaNome: executingRoutine.nome,
+                            comFoto: true
+                        }
+                    );
+                    
                     closeAndResetModal();
                 }
             );
         } else {
             await addDoc(collection(db, `/artifacts/${appId}/public/data/execucoes`), executionData);
+            
+            // Registrar log de atividade
+            await logActivity(
+                userData.uid,
+                userData.nome,
+                'EXECUCAO_ROTINA',
+                {
+                    rotinaId: executingRoutine.id,
+                    rotinaNome: executingRoutine.nome,
+                    comFoto: false
+                }
+            );
+            
             closeAndResetModal();
         }
     };
@@ -875,6 +963,18 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     const filteredRoutines = useMemo(() => {
         let filtered = routines;
         
+        // Filtro por rotinas atribuídas (se não for admin)
+        if (userData && userData.tipo !== 'admin') {
+            filtered = filtered.filter(r => {
+                // Se a rotina tem técnicos atribuídos, verifica se o usuário está na lista
+                if (r.assignedTechnicians && r.assignedTechnicians.length > 0) {
+                    return r.assignedTechnicians.includes(userData.uid);
+                }
+                // Se não tem técnicos atribuídos, todos podem ver
+                return true;
+            });
+        }
+        
         // Filtro por categoria
         if (filter !== 'Todas') {
             filtered = filtered.filter(r => r.categoria === filter);
@@ -906,7 +1006,7 @@ const RoutinesPage = ({ routines, executions, userData }) => {
         }
         
         return filtered;
-    }, [filter, priorityFilter, statusFilter, searchTerm, routines, getRoutineStatus]);
+    }, [filter, priorityFilter, statusFilter, searchTerm, routines, getRoutineStatus, userData]);
 
     const categories = ['Todas', ...new Set(routines.map(r => r.categoria))];
 
@@ -1880,7 +1980,8 @@ const AdminPage = ({ routines, users }) => {
         prioridade: 'media',
         responsavel: '',
         instrucoes: '',
-        checklist: []
+        checklist: [],
+        assignedTechnicians: []
     });
     const [checklistInput, setChecklistInput] = useState('');
 
@@ -1894,7 +1995,8 @@ const AdminPage = ({ routines, users }) => {
             prioridade: 'media',
             responsavel: '',
             instrucoes: '',
-            checklist: []
+            checklist: [],
+            assignedTechnicians: []
         });
         setChecklistInput('');
         setIsModalOpen(true);
@@ -1910,10 +2012,28 @@ const AdminPage = ({ routines, users }) => {
             prioridade: routine.prioridade || 'media',
             responsavel: routine.responsavel || '',
             instrucoes: routine.instrucoes || '',
-            checklist: routine.checklist || []
+            checklist: routine.checklist || [],
+            assignedTechnicians: routine.assignedTechnicians || []
         });
         setChecklistInput('');
         setIsModalOpen(true);
+    };
+
+    const toggleTechnician = (technicianId) => {
+        setFormState(prev => {
+            const assigned = prev.assignedTechnicians || [];
+            if (assigned.includes(technicianId)) {
+                return {
+                    ...prev,
+                    assignedTechnicians: assigned.filter(id => id !== technicianId)
+                };
+            } else {
+                return {
+                    ...prev,
+                    assignedTechnicians: [...assigned, technicianId]
+                };
+            }
+        });
     };
     
     const handleFormChange = (e) => {
@@ -2010,21 +2130,44 @@ const AdminPage = ({ routines, users }) => {
                                         <th className="p-2">Nome</th>
                                         <th className="p-2">Categoria</th>
                                         <th className="p-2">Frequência</th>
+                                        <th className="p-2">Técnicos Atribuídos</th>
                                         <th className="p-2">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {routines.map(routine => (
-                                        <tr key={routine.id} className="border-b hover:bg-gray-50">
-                                            <td className="p-2 font-medium">{routine.nome}</td>
-                                            <td className="p-2">{routine.categoria}</td>
-                                            <td className="p-2 capitalize">{routine.frequencia}</td>
-                                            <td className="p-2 flex gap-2">
-                                                <button onClick={() => openModalForEdit(routine)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5"/></button>
-                                                <button onClick={() => handleDeleteRoutine(routine.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5"/></button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {routines.map(routine => {
+                                        const assignedUsers = users.filter(u => 
+                                            routine.assignedTechnicians?.includes(u.uid)
+                                        );
+                                        return (
+                                            <tr key={routine.id} className="border-b hover:bg-gray-50">
+                                                <td className="p-2 font-medium">{routine.nome}</td>
+                                                <td className="p-2">{routine.categoria}</td>
+                                                <td className="p-2 capitalize">{routine.frequencia}</td>
+                                                <td className="p-2">
+                                                    {assignedUsers.length > 0 ? (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {assignedUsers.map(user => (
+                                                                <span 
+                                                                    key={user.uid}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs"
+                                                                >
+                                                                    <UserCheck className="w-3 h-3" />
+                                                                    {user.nome}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-500 italic">Todos</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-2 flex gap-2">
+                                                    <button onClick={() => openModalForEdit(routine)} className="text-blue-600 hover:text-blue-800"><Edit className="w-5 h-5"/></button>
+                                                    <button onClick={() => handleDeleteRoutine(routine.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-5 h-5"/></button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -2159,6 +2302,44 @@ const AdminPage = ({ routines, users }) => {
                                         </div>
                                     ))}
                                 </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Atribuir Técnicos */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                            <UserCog className="w-4 h-4" />
+                            Atribuir Técnicos (opcional)
+                        </label>
+                        <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                            {users.filter(u => u.tipo !== 'admin').length > 0 ? (
+                                users.filter(u => u.tipo !== 'admin').map(user => (
+                                    <label key={user.uid} className="flex items-center gap-3 p-2 bg-white rounded hover:bg-gray-50 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={formState.assignedTechnicians?.includes(user.uid) || false}
+                                            onChange={() => toggleTechnician(user.uid)}
+                                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-gray-800">{user.nome}</p>
+                                            <p className="text-xs text-gray-500 capitalize">{user.tipo}</p>
+                                        </div>
+                                        {user.tipo === 'estagiario' && (
+                                            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                                                Estagiário
+                                            </span>
+                                        )}
+                                    </label>
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-500 text-center py-2">Nenhum técnico cadastrado</p>
+                            )}
+                            {formState.assignedTechnicians?.length === 0 && (
+                                <p className="text-xs text-gray-500 italic mt-2">
+                                    Se nenhum técnico for selecionado, todos poderão visualizar e executar esta rotina.
+                                </p>
                             )}
                         </div>
                     </div>
@@ -2440,6 +2621,201 @@ const ReportsPage = ({ executions, routines, users }) => {
     );
 };
 
+// --- Página de Logs de Atividades ---
+const ActivityLogsPage = () => {
+    const [logs, setLogs] = useState([]);
+    const [filterUser, setFilterUser] = useState('');
+    const [filterAction, setFilterAction] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const logsRef = collection(db, `/artifacts/${appId}/activityLogs`);
+        const unsubscribe = onSnapshot(logsRef, (snapshot) => {
+            const logsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })).sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+            setLogs(logsData);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    const filteredLogs = useMemo(() => {
+        let filtered = logs;
+
+        if (filterUser) {
+            filtered = filtered.filter(log => 
+                log.userName.toLowerCase().includes(filterUser.toLowerCase())
+            );
+        }
+
+        if (filterAction) {
+            filtered = filtered.filter(log => log.action === filterAction);
+        }
+
+        return filtered;
+    }, [logs, filterUser, filterAction]);
+
+    const actionTypes = [...new Set(logs.map(log => log.action))];
+
+    const getActionLabel = (action) => {
+        const labels = {
+            'EXECUCAO_ROTINA': 'Execução de Rotina',
+            'CRIACAO_ROTINA': 'Criação de Rotina',
+            'EDICAO_ROTINA': 'Edição de Rotina',
+            'EXCLUSAO_ROTINA': 'Exclusão de Rotina',
+            'CRIACAO_IMPRESSORA': 'Criação de Impressora',
+            'EDICAO_IMPRESSORA': 'Edição de Impressora',
+            'EXCLUSAO_IMPRESSORA': 'Exclusão de Impressora',
+            'LOGIN': 'Login',
+            'LOGOUT': 'Logout'
+        };
+        return labels[action] || action;
+    };
+
+    const getActionIcon = (action) => {
+        switch(action) {
+            case 'EXECUCAO_ROTINA':
+                return <CheckCircle className="w-5 h-5 text-green-600" />;
+            case 'CRIACAO_ROTINA':
+            case 'CRIACAO_IMPRESSORA':
+                return <Plus className="w-5 h-5 text-blue-600" />;
+            case 'EDICAO_ROTINA':
+            case 'EDICAO_IMPRESSORA':
+                return <Edit className="w-5 h-5 text-yellow-600" />;
+            case 'EXCLUSAO_ROTINA':
+            case 'EXCLUSAO_IMPRESSORA':
+                return <Trash2 className="w-5 h-5 text-red-600" />;
+            case 'LOGIN':
+                return <UserCheck className="w-5 h-5 text-green-600" />;
+            case 'LOGOUT':
+                return <LogOut className="w-5 h-5 text-gray-600" />;
+            default:
+                return <Activity className="w-5 h-5 text-gray-600" />;
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-gray-600">Carregando logs...</div>
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Logs de Atividades</h2>
+                
+                {/* Filtros */}
+                <Card>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Filtrar por Usuário
+                            </label>
+                            <input
+                                type="text"
+                                value={filterUser}
+                                onChange={e => setFilterUser(e.target.value)}
+                                placeholder="Nome do usuário..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Filtrar por Ação
+                            </label>
+                            <select
+                                value={filterAction}
+                                onChange={e => setFilterAction(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="">Todas as Ações</option>
+                                {actionTypes.map(action => (
+                                    <option key={action} value={action}>
+                                        {getActionLabel(action)}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex items-end">
+                            <Button
+                                onClick={() => {
+                                    setFilterUser('');
+                                    setFilterAction('');
+                                }}
+                                variant="secondary"
+                                className="w-full"
+                            >
+                                <X className="w-4 h-4" />
+                                Limpar Filtros
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t">
+                        <span className="text-sm text-gray-600">
+                            Mostrando <strong>{filteredLogs.length}</strong> de <strong>{logs.length}</strong> registros
+                        </span>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Lista de Logs */}
+            <div className="space-y-3">
+                {filteredLogs.length > 0 ? filteredLogs.map(log => (
+                    <Card key={log.id}>
+                        <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 mt-1">
+                                {getActionIcon(log.action)}
+                            </div>
+                            <div className="flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <h3 className="font-semibold text-gray-800">
+                                            {getActionLabel(log.action)}
+                                        </h3>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            <strong>{log.userName}</strong>
+                                            {log.details?.rotinaNome && ` - ${log.details.rotinaNome}`}
+                                            {log.details?.impressoraNome && ` - ${log.details.impressoraNome}`}
+                                        </p>
+                                        {log.details && Object.keys(log.details).length > 0 && (
+                                            <div className="mt-2 text-xs text-gray-500">
+                                                {log.details.comFoto && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full mr-2">
+                                                        <Camera className="w-3 h-3" />
+                                                        Com foto
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-right text-xs text-gray-500">
+                                        {log.timestamp && (
+                                            <>
+                                                <div>{log.timestamp.toDate().toLocaleDateString('pt-BR')}</div>
+                                                <div>{log.timestamp.toDate().toLocaleTimeString('pt-BR')}</div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                )) : (
+                    <Card>
+                        <p className="text-center text-gray-600">Nenhum log encontrado com os filtros aplicados.</p>
+                    </Card>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- Componente Principal da Aplicação ---
 export default function App() {
     const [user, setUser] = useState(null);
@@ -2547,6 +2923,8 @@ export default function App() {
                 return <PrintersPage />;
             case 'relatorios':
                 return <ReportsPage executions={executions} routines={routines} users={users} />;
+            case 'logs':
+                return hasPermission(userData?.tipo, 'canViewLogs') ? <ActivityLogsPage /> : <p className="text-center text-gray-600 py-8">Acesso negado. Apenas administradores podem visualizar logs.</p>;
             case 'admin':
                 return userData.tipo === 'admin' ? <AdminPage routines={routines} users={users} /> : <p>Acesso negado.</p>;
             default:
@@ -2563,6 +2941,7 @@ export default function App() {
     ];
     
     if (userData && userData.tipo === 'admin') {
+        navItems.push({ name: 'Logs', icon: List, page: 'logs' });
         navItems.push({ name: 'Admin', icon: Settings, page: 'admin' });
     }
 
