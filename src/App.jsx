@@ -79,7 +79,14 @@ import {
     Send,
     AlertOctagon,
     CheckSquare,
-    GitBranch
+    GitBranch,
+    Package,
+    PackagePlus,
+    PackageMinus,
+    PackageSearch,
+    TrendingDown as StockDown,
+    Archive,
+    Boxes
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
@@ -434,6 +441,7 @@ const NotificationsPanel = ({ notifications, unreadCount, markAsRead, markAllAsR
             case 'routine_overdue': return <AlertOctagon className="w-5 h-5" />;
             case 'routine_pending': return <Clock className="w-5 h-5" />;
             case 'routine_assigned': return <CheckSquare className="w-5 h-5" />;
+            case 'stock_low': return <Package className="w-5 h-5" />;
             default: return <BellRing className="w-5 h-5" />;
         }
     };
@@ -3074,6 +3082,628 @@ Relatório gerado automaticamente em ${new Date().toLocaleString('pt-BR')}
     );
 };
 
+// --- Página de Estoque ---
+const StockPage = ({ userData }) => {
+    const [stockItems, setStockItems] = useState([]);
+    const [movements, setMovements] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
+    const [currentItem, setCurrentItem] = useState(null);
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('Todas');
+    const [stockFilter, setStockFilter] = useState('Todos');
+    
+    const [formState, setFormState] = useState({
+        nome: '',
+        categoria: 'Toner',
+        quantidade: 0,
+        quantidadeMinima: 5,
+        unidade: 'unidade',
+        localizacao: '',
+        observacoes: ''
+    });
+
+    const [movementForm, setMovementForm] = useState({
+        tipo: 'entrada',
+        quantidade: 0,
+        motivo: '',
+        responsavel: userData?.nome || ''
+    });
+
+    // Carregar itens do estoque
+    useEffect(() => {
+        const stockRef = collection(db, `/artifacts/${appId}/stock/items/list`);
+        const unsubStock = onSnapshot(stockRef, (snapshot) => {
+            const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setStockItems(items);
+            setLoading(false);
+        });
+
+        const movementsRef = collection(db, `/artifacts/${appId}/stock/movements/list`);
+        const unsubMovements = onSnapshot(movementsRef, (snapshot) => {
+            const movs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                .sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+            setMovements(movs);
+        });
+
+        return () => {
+            unsubStock();
+            unsubMovements();
+        };
+    }, []);
+
+    const openModalForNew = () => {
+        setCurrentItem(null);
+        setFormState({
+            nome: '',
+            categoria: 'Toner',
+            quantidade: 0,
+            quantidadeMinima: 5,
+            unidade: 'unidade',
+            localizacao: '',
+            observacoes: ''
+        });
+        setIsModalOpen(true);
+    };
+
+    const openModalForEdit = (item) => {
+        setCurrentItem(item);
+        setFormState({
+            nome: item.nome,
+            categoria: item.categoria,
+            quantidade: item.quantidade,
+            quantidadeMinima: item.quantidadeMinima,
+            unidade: item.unidade,
+            localizacao: item.localizacao || '',
+            observacoes: item.observacoes || ''
+        });
+        setIsModalOpen(true);
+    };
+
+    const openMovementModal = (item) => {
+        setSelectedItem(item);
+        setMovementForm({
+            tipo: 'entrada',
+            quantidade: 0,
+            motivo: '',
+            responsavel: userData?.nome || ''
+        });
+        setIsMovementModalOpen(true);
+    };
+
+    const handleFormSubmit = async () => {
+        if (!formState.nome) {
+            alert('Nome do item é obrigatório');
+            return;
+        }
+
+        try {
+            const itemData = {
+                ...formState,
+                quantidade: Number(formState.quantidade),
+                quantidadeMinima: Number(formState.quantidadeMinima),
+                updatedAt: Timestamp.now()
+            };
+
+            if (currentItem) {
+                await updateDoc(doc(db, `/artifacts/${appId}/stock/items/list`, currentItem.id), itemData);
+                
+                await logActivity(
+                    userData.uid,
+                    userData.nome,
+                    'EDICAO_ESTOQUE',
+                    { itemId: currentItem.id, itemNome: formState.nome }
+                );
+            } else {
+                itemData.createdAt = Timestamp.now();
+                itemData.createdBy = userData.nome;
+                
+                await addDoc(collection(db, `/artifacts/${appId}/stock/items/list`), itemData);
+                
+                await logActivity(
+                    userData.uid,
+                    userData.nome,
+                    'CRIACAO_ESTOQUE',
+                    { itemNome: formState.nome }
+                );
+            }
+
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error('Erro ao salvar item:', error);
+            alert('Erro ao salvar item');
+        }
+    };
+
+    const handleMovementSubmit = async () => {
+        if (!movementForm.quantidade || movementForm.quantidade <= 0) {
+            alert('Quantidade deve ser maior que zero');
+            return;
+        }
+
+        try {
+            const movement = {
+                itemId: selectedItem.id,
+                itemNome: selectedItem.nome,
+                tipo: movementForm.tipo,
+                quantidade: Number(movementForm.quantidade),
+                motivo: movementForm.motivo,
+                responsavel: movementForm.responsavel,
+                timestamp: Timestamp.now(),
+                quantidadeAnterior: selectedItem.quantidade
+            };
+
+            // Registrar movimentação
+            await addDoc(collection(db, `/artifacts/${appId}/stock/movements/list`), movement);
+
+            // Atualizar quantidade do item
+            const newQuantity = movementForm.tipo === 'entrada'
+                ? selectedItem.quantidade + Number(movementForm.quantidade)
+                : selectedItem.quantidade - Number(movementForm.quantidade);
+
+            await updateDoc(doc(db, `/artifacts/${appId}/stock/items/list`, selectedItem.id), {
+                quantidade: newQuantity,
+                updatedAt: Timestamp.now()
+            });
+
+            // Log de atividade
+            await logActivity(
+                userData.uid,
+                userData.nome,
+                movementForm.tipo === 'entrada' ? 'ENTRADA_ESTOQUE' : 'SAIDA_ESTOQUE',
+                {
+                    itemNome: selectedItem.nome,
+                    quantidade: movementForm.quantidade,
+                    motivo: movementForm.motivo
+                }
+            );
+
+            // Verificar se ficou abaixo do mínimo e criar notificação
+            if (newQuantity <= selectedItem.quantidadeMinima) {
+                await createNotification(
+                    userData.uid,
+                    userData.nome,
+                    'stock_low',
+                    `Estoque baixo: ${selectedItem.nome} (${newQuantity} ${selectedItem.unidade})`,
+                    selectedItem.id,
+                    'high'
+                );
+            }
+
+            setIsMovementModalOpen(false);
+        } catch (error) {
+            console.error('Erro ao registrar movimentação:', error);
+            alert('Erro ao registrar movimentação');
+        }
+    };
+
+    const handleDeleteItem = async (itemId) => {
+        if (window.confirm('Tem certeza que deseja excluir este item?')) {
+            try {
+                await deleteDoc(doc(db, `/artifacts/${appId}/stock/items/list`, itemId));
+                
+                await logActivity(
+                    userData.uid,
+                    userData.nome,
+                    'EXCLUSAO_ESTOQUE',
+                    { itemId }
+                );
+            } catch (error) {
+                console.error('Erro ao excluir item:', error);
+                alert('Erro ao excluir item');
+            }
+        }
+    };
+
+    const filteredItems = useMemo(() => {
+        let filtered = stockItems;
+
+        if (categoryFilter !== 'Todas') {
+            filtered = filtered.filter(item => item.categoria === categoryFilter);
+        }
+
+        if (stockFilter === 'Baixo') {
+            filtered = filtered.filter(item => item.quantidade <= item.quantidadeMinima);
+        } else if (stockFilter === 'Normal') {
+            filtered = filtered.filter(item => item.quantidade > item.quantidadeMinima);
+        }
+
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(item =>
+                item.nome.toLowerCase().includes(term) ||
+                (item.localizacao && item.localizacao.toLowerCase().includes(term))
+            );
+        }
+
+        return filtered;
+    }, [stockItems, categoryFilter, stockFilter, searchTerm]);
+
+    const categories = ['Todas', ...new Set(stockItems.map(item => item.categoria))];
+    const lowStockCount = stockItems.filter(item => item.quantidade <= item.quantidadeMinima).length;
+
+    if (loading) {
+        return <Spinner />;
+    }
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Controle de Estoque</h2>
+                    {lowStockCount > 0 && (
+                        <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="w-4 h-4" />
+                            {lowStockCount} item(ns) com estoque baixo
+                        </p>
+                    )}
+                </div>
+                {hasPermission(userData?.tipo, 'canManageRoutines') && (
+                    <Button onClick={openModalForNew}>
+                        <PackagePlus className="w-5 h-5" />
+                        Novo Item
+                    </Button>
+                )}
+            </div>
+
+            {/* Filtros */}
+            <Card className="mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Buscar
+                        </label>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder="Nome ou localização..."
+                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Categoria
+                        </label>
+                        <select
+                            value={categoryFilter}
+                            onChange={e => setCategoryFilter(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            {categories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Status
+                        </label>
+                        <select
+                            value={stockFilter}
+                            onChange={e => setStockFilter(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="Todos">Todos</option>
+                            <option value="Baixo">Estoque Baixo</option>
+                            <option value="Normal">Estoque Normal</option>
+                        </select>
+                    </div>
+                </div>
+            </Card>
+
+            {/* Lista de Itens */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredItems.map(item => {
+                    const isLowStock = item.quantidade <= item.quantidadeMinima;
+                    const stockPercentage = (item.quantidade / (item.quantidadeMinima * 2)) * 100;
+
+                    return (
+                        <Card key={item.id} className={isLowStock ? 'border-l-4 border-red-500' : ''}>
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-lg text-gray-800">{item.nome}</h3>
+                                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                                        {item.categoria}
+                                    </span>
+                                </div>
+                                {isLowStock && (
+                                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                                )}
+                            </div>
+
+                            <div className="space-y-2 mb-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Quantidade:</span>
+                                    <span className={`text-2xl font-bold ${isLowStock ? 'text-red-600' : 'text-green-600'}`}>
+                                        {item.quantidade} {item.unidade}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600">Mínimo:</span>
+                                    <span className="text-gray-800">{item.quantidadeMinima} {item.unidade}</span>
+                                </div>
+                                {item.localizacao && (
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <Archive className="w-4 h-4" />
+                                        {item.localizacao}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Barra de progresso */}
+                            <div className="mb-4">
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                        className={`h-2 rounded-full transition-all ${
+                                            isLowStock ? 'bg-red-500' : 'bg-green-500'
+                                        }`}
+                                        style={{ width: `${Math.min(stockPercentage, 100)}%` }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                                <Button
+                                    onClick={() => openMovementModal(item)}
+                                    variant="secondary"
+                                    className="flex-1"
+                                >
+                                    <PackageSearch className="w-4 h-4" />
+                                    Movimentar
+                                </Button>
+                                {hasPermission(userData?.tipo, 'canManageRoutines') && (
+                                    <>
+                                        <button
+                                            onClick={() => openModalForEdit(item)}
+                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                        >
+                                            <Edit className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteItem(item.id)}
+                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </Card>
+                    );
+                })}
+            </div>
+
+            {filteredItems.length === 0 && (
+                <Card>
+                    <div className="text-center py-12 text-gray-500">
+                        <Package className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                        <p>Nenhum item encontrado</p>
+                    </div>
+                </Card>
+            )}
+
+            {/* Modal de Item */}
+            {isModalOpen && (
+                <Modal
+                    title={currentItem ? 'Editar Item' : 'Novo Item'}
+                    onClose={() => setIsModalOpen(false)}
+                    size="lg"
+                >
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Nome do Item *
+                                </label>
+                                <Input
+                                    value={formState.nome}
+                                    onChange={e => setFormState({ ...formState, nome: e.target.value })}
+                                    placeholder="Ex: Toner HP CF283A"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Categoria
+                                </label>
+                                <select
+                                    value={formState.categoria}
+                                    onChange={e => setFormState({ ...formState, categoria: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                >
+                                    <option value="Toner">Toner</option>
+                                    <option value="Cabo">Cabo</option>
+                                    <option value="HD">HD</option>
+                                    <option value="SSD">SSD</option>
+                                    <option value="Memória RAM">Memória RAM</option>
+                                    <option value="Mouse">Mouse</option>
+                                    <option value="Teclado">Teclado</option>
+                                    <option value="Fonte">Fonte</option>
+                                    <option value="Outros">Outros</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Quantidade Atual
+                                </label>
+                                <Input
+                                    type="number"
+                                    value={formState.quantidade}
+                                    onChange={e => setFormState({ ...formState, quantidade: e.target.value })}
+                                    min="0"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Quantidade Mínima
+                                </label>
+                                <Input
+                                    type="number"
+                                    value={formState.quantidadeMinima}
+                                    onChange={e => setFormState({ ...formState, quantidadeMinima: e.target.value })}
+                                    min="0"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Unidade
+                                </label>
+                                <select
+                                    value={formState.unidade}
+                                    onChange={e => setFormState({ ...formState, unidade: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                >
+                                    <option value="unidade">Unidade</option>
+                                    <option value="caixa">Caixa</option>
+                                    <option value="metro">Metro</option>
+                                    <option value="pacote">Pacote</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Localização
+                            </label>
+                            <Input
+                                value={formState.localizacao}
+                                onChange={e => setFormState({ ...formState, localizacao: e.target.value })}
+                                placeholder="Ex: Armário 2, Prateleira 3"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Observações
+                            </label>
+                            <textarea
+                                value={formState.observacoes}
+                                onChange={e => setFormState({ ...formState, observacoes: e.target.value })}
+                                rows="3"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                placeholder="Informações adicionais..."
+                            />
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
+                                Cancelar
+                            </Button>
+                            <Button onClick={handleFormSubmit}>
+                                Salvar Item
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Modal de Movimentação */}
+            {isMovementModalOpen && selectedItem && (
+                <Modal
+                    title={`Movimentar: ${selectedItem.nome}`}
+                    onClose={() => setIsMovementModalOpen(false)}
+                >
+                    <div className="space-y-4">
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">Estoque Atual:</span>
+                                <span className="text-2xl font-bold text-gray-800">
+                                    {selectedItem.quantidade} {selectedItem.unidade}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Tipo de Movimentação
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => setMovementForm({ ...movementForm, tipo: 'entrada' })}
+                                    className={`p-3 rounded-lg border-2 flex items-center justify-center gap-2 ${
+                                        movementForm.tipo === 'entrada'
+                                            ? 'border-green-500 bg-green-50 text-green-700'
+                                            : 'border-gray-300 text-gray-600'
+                                    }`}
+                                >
+                                    <PackagePlus className="w-5 h-5" />
+                                    Entrada
+                                </button>
+                                <button
+                                    onClick={() => setMovementForm({ ...movementForm, tipo: 'saida' })}
+                                    className={`p-3 rounded-lg border-2 flex items-center justify-center gap-2 ${
+                                        movementForm.tipo === 'saida'
+                                            ? 'border-red-500 bg-red-50 text-red-700'
+                                            : 'border-gray-300 text-gray-600'
+                                    }`}
+                                >
+                                    <PackageMinus className="w-5 h-5" />
+                                    Saída
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Quantidade
+                            </label>
+                            <Input
+                                type="number"
+                                value={movementForm.quantidade}
+                                onChange={e => setMovementForm({ ...movementForm, quantidade: e.target.value })}
+                                min="1"
+                                placeholder="0"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Motivo
+                            </label>
+                            <textarea
+                                value={movementForm.motivo}
+                                onChange={e => setMovementForm({ ...movementForm, motivo: e.target.value })}
+                                rows="3"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                placeholder="Ex: Compra, Uso em manutenção, Troca de equipamento..."
+                            />
+                        </div>
+
+                        {movementForm.quantidade > 0 && (
+                            <div className="p-4 bg-blue-50 rounded-lg">
+                                <p className="text-sm text-blue-800">
+                                    <strong>Novo estoque:</strong>{' '}
+                                    {movementForm.tipo === 'entrada'
+                                        ? selectedItem.quantidade + Number(movementForm.quantidade)
+                                        : selectedItem.quantidade - Number(movementForm.quantidade)
+                                    } {selectedItem.unidade}
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            <Button variant="secondary" onClick={() => setIsMovementModalOpen(false)}>
+                                Cancelar
+                            </Button>
+                            <Button onClick={handleMovementSubmit}>
+                                Confirmar Movimentação
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
 // --- Página de Logs de Atividades ---
 const ActivityLogsPage = () => {
     const [logs, setLogs] = useState([]);
@@ -3122,6 +3752,11 @@ const ActivityLogsPage = () => {
             'CRIACAO_IMPRESSORA': 'Criação de Impressora',
             'EDICAO_IMPRESSORA': 'Edição de Impressora',
             'EXCLUSAO_IMPRESSORA': 'Exclusão de Impressora',
+            'CRIACAO_ESTOQUE': 'Criação de Item no Estoque',
+            'EDICAO_ESTOQUE': 'Edição de Item no Estoque',
+            'EXCLUSAO_ESTOQUE': 'Exclusão de Item no Estoque',
+            'ENTRADA_ESTOQUE': 'Entrada no Estoque',
+            'SAIDA_ESTOQUE': 'Saída do Estoque',
             'LOGIN': 'Login',
             'LOGOUT': 'Logout'
         };
@@ -3134,13 +3769,20 @@ const ActivityLogsPage = () => {
                 return <CheckCircle className="w-5 h-5 text-green-600" />;
             case 'CRIACAO_ROTINA':
             case 'CRIACAO_IMPRESSORA':
+            case 'CRIACAO_ESTOQUE':
                 return <Plus className="w-5 h-5 text-blue-600" />;
             case 'EDICAO_ROTINA':
             case 'EDICAO_IMPRESSORA':
+            case 'EDICAO_ESTOQUE':
                 return <Edit className="w-5 h-5 text-yellow-600" />;
             case 'EXCLUSAO_ROTINA':
             case 'EXCLUSAO_IMPRESSORA':
+            case 'EXCLUSAO_ESTOQUE':
                 return <Trash2 className="w-5 h-5 text-red-600" />;
+            case 'ENTRADA_ESTOQUE':
+                return <PackagePlus className="w-5 h-5 text-green-600" />;
+            case 'SAIDA_ESTOQUE':
+                return <PackageMinus className="w-5 h-5 text-orange-600" />;
             case 'LOGIN':
                 return <UserCheck className="w-5 h-5 text-green-600" />;
             case 'LOGOUT':
@@ -3374,6 +4016,8 @@ export default function App() {
                 return <HistoryPage executions={executions} routines={routines} />;
             case 'impressoras':
                 return <PrintersPage />;
+            case 'estoque':
+                return <StockPage userData={userData} />;
             case 'relatorios':
                 return <ReportsPage executions={executions} routines={routines} users={users} />;
             case 'auto-reports':
@@ -3392,6 +4036,7 @@ export default function App() {
         { name: 'Rotinas', icon: ClipboardList, page: 'rotinas' },
         { name: 'Histórico', icon: History, page: 'historico' },
         { name: 'Impressoras', icon: Printer, page: 'impressoras' },
+        { name: 'Estoque', icon: Package, page: 'estoque' },
         { name: 'Relatórios', icon: BarChart3, page: 'relatorios' },
         { name: 'Relatórios Auto', icon: FileCheck, page: 'auto-reports' },
     ];
