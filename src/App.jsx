@@ -3115,18 +3115,29 @@ const StockPage = ({ userData }) => {
     // Carregar itens do estoque
     useEffect(() => {
         const stockRef = collection(db, `/artifacts/${appId}/stock/items/list`);
-        const unsubStock = onSnapshot(stockRef, (snapshot) => {
-            const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setStockItems(items);
-            setLoading(false);
-        });
+        const unsubStock = onSnapshot(stockRef, 
+            (snapshot) => {
+                const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setStockItems(items);
+                setLoading(false);
+            },
+            (error) => {
+                console.error('Erro ao carregar estoque:', error);
+                setLoading(false);
+            }
+        );
 
         const movementsRef = collection(db, `/artifacts/${appId}/stock/movements/list`);
-        const unsubMovements = onSnapshot(movementsRef, (snapshot) => {
-            const movs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-                .sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
-            setMovements(movs);
-        });
+        const unsubMovements = onSnapshot(movementsRef, 
+            (snapshot) => {
+                const movs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                    .sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+                setMovements(movs);
+            },
+            (error) => {
+                console.error('Erro ao carregar movimentações:', error);
+            }
+        );
 
         return () => {
             unsubStock();
@@ -3321,11 +3332,19 @@ const StockPage = ({ userData }) => {
         return filtered;
     }, [stockItems, categoryFilter, stockFilter, searchTerm]);
 
-    const categories = ['Todas', ...new Set(stockItems.map(item => item.categoria))];
-    const lowStockCount = stockItems.filter(item => item.quantidade <= item.quantidadeMinima).length;
+    const categories = ['Todas', ...new Set(stockItems.map(item => item.categoria || 'Outros'))];
+    const lowStockCount = stockItems.filter(item => 
+        item.quantidade !== undefined && 
+        item.quantidadeMinima !== undefined && 
+        item.quantidade <= item.quantidadeMinima
+    ).length;
 
     if (loading) {
-        return <Spinner />;
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Spinner />
+            </div>
+        );
     }
 
     return (
