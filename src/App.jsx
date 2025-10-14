@@ -8,7 +8,9 @@ import {
     signInWithEmailAndPassword, 
     signOut,
     signInAnonymously,
-    signInWithCustomToken
+    signInWithCustomToken,
+    setPersistence,
+    browserLocalPersistence
 } from 'firebase/auth';
 import { 
     getFirestore, 
@@ -3149,6 +3151,9 @@ const StockPage = ({ userData }) => {
     }, []);
 
     const openModalForNew = () => {
+        console.log('openModalForNew chamado');
+        console.log('userData:', userData);
+        console.log('Permissão canManageStock:', hasPermission(userData?.tipo, 'canManageStock'));
         setCurrentItem(null);
         setFormState({
             nome: '',
@@ -3160,6 +3165,7 @@ const StockPage = ({ userData }) => {
             observacoes: ''
         });
         setIsModalOpen(true);
+        console.log('Modal aberto, isModalOpen:', true);
     };
 
     const openModalForEdit = (item) => {
@@ -3948,24 +3954,44 @@ export default function App() {
     const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
     
     useEffect(() => {
-      const performAuth = async () => {
+      // Configurar persistência de autenticação
+      const setupAuth = async () => {
         try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
+          // Configurar persistência LOCAL (mantém login após fechar navegador)
+          await setPersistence(auth, browserLocalPersistence);
+          
+          // Verificar se já existe um usuário autenticado
+          const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+              // Usuário já autenticado
+              console.log('Usuário já autenticado:', currentUser.uid);
+              setUser(currentUser);
+              setAuthLoading(false);
+            } else {
+              // Nenhum usuário autenticado, fazer login
+              try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                  await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                  await signInAnonymously(auth);
+                }
+              } catch (error) {
+                console.error("Authentication Error:", error);
+                setAuthLoading(false);
+              }
+            }
+          });
+          return unsubscribeAuth;
         } catch (error) {
-          console.error("Authentication Error:", error);
+          console.error("Setup Auth Error:", error);
+          setAuthLoading(false);
         }
       };
-      performAuth();
-
-      const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-          setUser(currentUser);
-          setAuthLoading(false);
-      });
-      return () => unsubscribeAuth();
+      
+      const unsubPromise = setupAuth();
+      return () => {
+        unsubPromise.then(unsub => unsub && unsub());
+      };
     }, []);
 
     useEffect(() => {
