@@ -117,6 +117,7 @@ const PERMISSIONS = {
         canManageUsers: true,
         canManageRoutines: true,
         canManagePrinters: true,
+        canManageStock: true,
         canExecuteRoutines: true,
         canViewReports: true,
         canViewLogs: true,
@@ -126,6 +127,7 @@ const PERMISSIONS = {
         canManageUsers: false,
         canManageRoutines: false,
         canManagePrinters: false,
+        canManageStock: true,
         canExecuteRoutines: true,
         canViewReports: true,
         canViewLogs: false,
@@ -135,6 +137,7 @@ const PERMISSIONS = {
         canManageUsers: false,
         canManageRoutines: false,
         canManagePrinters: false,
+        canManageStock: false,
         canExecuteRoutines: true,
         canViewReports: false,
         canViewLogs: false,
@@ -3359,7 +3362,7 @@ const StockPage = ({ userData }) => {
                         </p>
                     )}
                 </div>
-                {hasPermission(userData?.tipo, 'canManageRoutines') && (
+                {hasPermission(userData?.tipo, 'canManageStock') && (
                     <Button onClick={openModalForNew}>
                         <PackagePlus className="w-5 h-5" />
                         Novo Item
@@ -3476,7 +3479,7 @@ const StockPage = ({ userData }) => {
                                     <PackageSearch className="w-4 h-4" />
                                     Movimentar
                                 </Button>
-                                {hasPermission(userData?.tipo, 'canManageRoutines') && (
+                                {hasPermission(userData?.tipo, 'canManageStock') && (
                                     <>
                                         <button
                                             onClick={() => openModalForEdit(item)}
