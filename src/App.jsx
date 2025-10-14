@@ -3517,14 +3517,12 @@ const StockPage = ({ userData }) => {
             )}
 
             {/* Modal de Item */}
-            {isModalOpen && (() => {
-                console.log('Renderizando Modal de Item, isModalOpen:', isModalOpen);
-                return (
-                    <Modal
-                        title={currentItem ? 'Editar Item' : 'Novo Item'}
-                        onClose={() => setIsModalOpen(false)}
-                        size="lg"
-                    >
+            <Modal
+                isOpen={isModalOpen}
+                title={currentItem ? 'Editar Item' : 'Novo Item'}
+                onClose={() => setIsModalOpen(false)}
+                size="lg"
+            >
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
@@ -3632,13 +3630,12 @@ const StockPage = ({ userData }) => {
                             </Button>
                         </div>
                     </div>
-                </Modal>
-                );
-            })()}
+            </Modal>
 
             {/* Modal de Movimentação */}
-            {isMovementModalOpen && selectedItem && (
+            {selectedItem && (
                 <Modal
+                    isOpen={isMovementModalOpen}
                     title={`Movimentar: ${selectedItem.nome}`}
                     onClose={() => setIsMovementModalOpen(false)}
                 >
