@@ -88,7 +88,8 @@ import {
     PackageSearch,
     TrendingDown as StockDown,
     Archive,
-    Boxes
+    Boxes,
+    RefreshCw
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
