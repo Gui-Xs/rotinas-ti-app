@@ -1748,6 +1748,52 @@ const PrintersPage = () => {
         );
     };
 
+    // Função para atualizar níveis de tinta automaticamente (SIMULAÇÃO PARA TESTE)
+    const handleAutoUpdateInkLevels = async (printerId) => {
+        try {
+            const printer = printers.find(p => p.id === printerId);
+            if (!printer) return;
+
+            // SIMULAÇÃO: Gera níveis aleatórios para teste
+            // Em produção, isso seria substituído pela leitura real da impressora
+            const simulatedLevels = {
+                tintaPreta: Math.max(0, Math.floor(Math.random() * 100)),
+                tintaCiano: Math.max(0, Math.floor(Math.random() * 100)),
+                tintaMagenta: Math.max(0, Math.floor(Math.random() * 100)),
+                tintaAmarela: Math.max(0, Math.floor(Math.random() * 100)),
+                ultimaAtualizacao: Timestamp.now(),
+                metodoAtualizacao: 'Simulação (Teste)'
+            };
+
+            const printerRef = doc(db, `/artifacts/${appId}/public/data/impressoras`, printerId);
+            await updateDoc(printerRef, simulatedLevels);
+
+            alert(`Níveis de tinta atualizados!\n\nPreta: ${simulatedLevels.tintaPreta}%\nCiano: ${simulatedLevels.tintaCiano}%\nMagenta: ${simulatedLevels.tintaMagenta}%\nAmarela: ${simulatedLevels.tintaAmarela}%\n\n⚠️ Modo de teste: valores simulados`);
+        } catch (error) {
+            console.error('Erro ao atualizar níveis de tinta:', error);
+            alert('Erro ao atualizar níveis de tinta');
+        }
+    };
+
+    // Função para atualizar TODAS as impressoras de uma vez
+    const handleAutoUpdateAllPrinters = async () => {
+        if (!window.confirm('Atualizar níveis de tinta de todas as impressoras?\n\n⚠️ Modo de teste: valores serão simulados')) {
+            return;
+        }
+
+        try {
+            let updated = 0;
+            for (const printer of printers) {
+                await handleAutoUpdateInkLevels(printer.id);
+                updated++;
+            }
+            alert(`${updated} impressora(s) atualizada(s) com sucesso!`);
+        } catch (error) {
+            console.error('Erro ao atualizar impressoras:', error);
+            alert('Erro ao atualizar impressoras');
+        }
+    };
+
     // Filtrar impressoras
     const filteredPrinters = useMemo(() => {
         let filtered = printers;
@@ -1788,10 +1834,16 @@ const PrintersPage = () => {
             <div className="mb-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
                     <h2 className="text-2xl font-bold text-gray-800">Gerenciar Impressoras</h2>
-                    <Button onClick={openModalForNew}>
-                        <Plus className="w-5 h-5"/>
-                        Nova Impressora
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button onClick={handleAutoUpdateAllPrinters} variant="secondary">
+                            <RefreshCw className="w-5 h-5"/>
+                            Atualizar Todas
+                        </Button>
+                        <Button onClick={openModalForNew}>
+                            <Plus className="w-5 h-5"/>
+                            Nova Impressora
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Alerta de Tinta Baixa */}
@@ -1979,6 +2031,22 @@ const PrintersPage = () => {
                                                                     />
                                                                 </div>
                                                             </div>
+                                                        </div>
+                                                        <div className="mt-3">
+                                                            <Button 
+                                                                onClick={() => handleAutoUpdateInkLevels(printer.id)}
+                                                                variant="secondary"
+                                                                className="text-sm"
+                                                            >
+                                                                <RefreshCw className="w-4 h-4" />
+                                                                Atualizar Níveis de Tinta
+                                                            </Button>
+                                                            {printer.ultimaAtualizacao && (
+                                                                <p className="text-xs text-gray-500 mt-2">
+                                                                    Última atualização: {printer.ultimaAtualizacao.toDate().toLocaleString('pt-BR')}
+                                                                    {printer.metodoAtualizacao && ` (${printer.metodoAtualizacao})`}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     {printer.observacoes && (
