@@ -1630,122 +1630,68 @@ const HistoryPage = ({ executions, routines }) => {
 
 const PrintersPage = () => {
     const [printers, setPrinters] = useState([]);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [currentPrinter, setCurrentPrinter] = useState(null);
     const [expandedPrinter, setExpandedPrinter] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('Todas');
-    const [inkFilter, setInkFilter] = useState('Todas');
-    const [formState, setFormState] = useState({
-        nome: '',
-        modelo: '',
-        localizacao: '',
-        ip: '',
-        status: 'ativa',
-        tintaPreta: 100,
-        tintaCiano: 100,
-        tintaMagenta: 100,
-        tintaAmarela: 100,
-        observacoes: ''
-    });
+    const [typeFilter, setTypeFilter] = useState('Todas');
+    const [locationFilter, setLocationFilter] = useState('Todas');
+    const [loading, setLoading] = useState(true);
+    const [lastUpdate, setLastUpdate] = useState(new Date());
 
+    // Monitoramento em tempo real das impressoras via Firebase
     useEffect(() => {
-        const printersRef = collection(db, `/artifacts/${appId}/public/data/impressoras`);
+        const printersRef = collection(db, `/artifacts/${appId}/printers`);
         const unsubscribe = onSnapshot(printersRef, (snapshot) => {
-            setPrinters(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, err => console.error("Erro ao carregar impressoras:", err));
+            const printersData = snapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                ...doc.data() 
+            }));
+            setPrinters(printersData);
+            setLoading(false);
+            setLastUpdate(new Date());
+        }, err => {
+            console.error("Erro ao carregar impressoras:", err);
+            setLoading(false);
+        });
         return () => unsubscribe();
     }, []);
 
-    const openModalForNew = () => {
-        setCurrentPrinter(null);
-        setFormState({
-            nome: '',
-            modelo: '',
-            localizacao: '',
-            ip: '',
-            status: 'ativa',
-            tintaPreta: 100,
-            tintaCiano: 100,
-            tintaMagenta: 100,
-            tintaAmarela: 100,
-            observacoes: ''
-        });
-        setIsModalOpen(true);
-    };
-    
-    const openModalForEdit = (printer) => {
-        setCurrentPrinter(printer);
-        setFormState({
-            nome: printer.nome,
-            modelo: printer.modelo,
-            localizacao: printer.localizacao,
-            ip: printer.ip,
-            status: printer.status,
-            tintaPreta: printer.tintaPreta || 100,
-            tintaCiano: printer.tintaCiano || 100,
-            tintaMagenta: printer.tintaMagenta || 100,
-            tintaAmarela: printer.tintaAmarela || 100,
-            observacoes: printer.observacoes || ''
-        });
-        setIsModalOpen(true);
-    };
-    
-    const handleFormChange = (e) => {
-        const { name, value } = e.target;
-        setFormState(prev => ({ ...prev, [name]: value }));
+    // Verificar se impressora está offline (última verificação > 5 minutos)
+    const isOffline = (printer) => {
+        if (!printer.last_check) return true;
+        const lastCheck = printer.last_check.toDate ? printer.last_check.toDate() : new Date(printer.last_check);
+        const now = new Date();
+        const diffMinutes = (now - lastCheck) / 1000 / 60;
+        return diffMinutes > 5;
     };
 
-    const handleFormSubmit = async () => {
-        if (!formState.nome || !formState.modelo) {
-            alert("Nome e modelo são obrigatórios.");
-            return;
-        }
-
-        try {
-            if (currentPrinter) {
-                const printerRef = doc(db, `/artifacts/${appId}/public/data/impressoras`, currentPrinter.id);
-                await updateDoc(printerRef, formState);
-            } else {
-                await addDoc(collection(db, `/artifacts/${appId}/public/data/impressoras`), formState);
-            }
-            setIsModalOpen(false);
-        } catch (error) {
-            console.error("Erro ao salvar impressora:", error);
-            alert("Ocorreu um erro ao salvar.");
-        }
+    // Obter cor do status
+    const getStatusColor = (printer) => {
+        if (isOffline(printer)) return 'bg-gray-100 text-gray-800 border-gray-300';
+        if (printer.status === 'Offline') return 'bg-red-100 text-red-800 border-red-300';
+        if (printer.status === 'Online') return 'bg-green-100 text-green-800 border-green-300';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
     };
 
-    const handleDeletePrinter = async (printerId) => {
-        if (window.confirm("Tem certeza que deseja excluir esta impressora? Esta ação não pode ser desfeita.")) {
-            try {
-                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/impressoras`, printerId));
-            } catch (error) {
-                console.error("Erro ao excluir impressora:", error);
-                alert("Falha ao excluir a impressora.");
-            }
-        }
+    // Formatar última verificação
+    const formatLastCheck = (printer) => {
+        if (!printer.last_check) return 'Nunca';
+        const lastCheck = printer.last_check.toDate ? printer.last_check.toDate() : new Date(printer.last_check);
+        const now = new Date();
+        const diffMinutes = Math.floor((now - lastCheck) / 1000 / 60);
+        
+        if (diffMinutes < 1) return 'Agora mesmo';
+        if (diffMinutes < 60) return `${diffMinutes} min atrás`;
+        const diffHours = Math.floor(diffMinutes / 60);
+        if (diffHours < 24) return `${diffHours}h atrás`;
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays}d atrás`;
     };
 
-    // Função para verificar se a tinta está baixa
-    const hasLowInk = (printer) => {
-        const threshold = 20;
-        return (
-            (printer.tintaPreta || 100) <= threshold ||
-            (printer.tintaCiano || 100) <= threshold ||
-            (printer.tintaMagenta || 100) <= threshold ||
-            (printer.tintaAmarela || 100) <= threshold
-        );
-    };
-
-    // Função para obter o nível mínimo de tinta
-    const getMinInkLevel = (printer) => {
-        return Math.min(
-            printer.tintaPreta || 100,
-            printer.tintaCiano || 100,
-            printer.tintaMagenta || 100,
-            printer.tintaAmarela || 100
-        );
+    // Atualização manual (força refresh)
+    const handleManualRefresh = () => {
+        setLastUpdate(new Date());
+        // O onSnapshot já mantém os dados atualizados automaticamente
     };
 
     // Filtrar impressoras
@@ -1754,54 +1700,124 @@ const PrintersPage = () => {
 
         // Filtro por status
         if (statusFilter !== 'Todas') {
-            filtered = filtered.filter(p => p.status === statusFilter);
+            if (statusFilter === 'Offline-Timeout') {
+                filtered = filtered.filter(p => isOffline(p));
+            } else {
+                filtered = filtered.filter(p => p.status === statusFilter);
+            }
         }
 
-        // Filtro por nível de tinta
-        if (inkFilter === 'Baixa') {
-            filtered = filtered.filter(p => hasLowInk(p));
-        } else if (inkFilter === 'Crítica') {
-            filtered = filtered.filter(p => getMinInkLevel(p) <= 10);
+        // Filtro por tipo
+        if (typeFilter !== 'Todas') {
+            filtered = filtered.filter(p => p.type === typeFilter);
+        }
+
+        // Filtro por localização
+        if (locationFilter !== 'Todas') {
+            filtered = filtered.filter(p => p.location === locationFilter);
         }
 
         // Busca por texto
         if (searchTerm.trim()) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(p =>
-                p.nome.toLowerCase().includes(term) ||
-                (p.modelo && p.modelo.toLowerCase().includes(term)) ||
-                (p.localizacao && p.localizacao.toLowerCase().includes(term)) ||
-                (p.ip && p.ip.toLowerCase().includes(term))
+                (p.name && p.name.toLowerCase().includes(term)) ||
+                (p.location && p.location.toLowerCase().includes(term)) ||
+                (p.ip && p.ip.toLowerCase().includes(term)) ||
+                (p.registered_by && p.registered_by.toLowerCase().includes(term))
             );
         }
 
         return filtered;
-    }, [printers, statusFilter, inkFilter, searchTerm]);
+    }, [printers, statusFilter, typeFilter, locationFilter, searchTerm]);
 
-    // Contar impressoras com tinta baixa
-    const lowInkCount = useMemo(() => {
-        return printers.filter(p => hasLowInk(p)).length;
+    // Obter localizações únicas
+    const locations = useMemo(() => {
+        const locs = new Set(printers.map(p => p.location).filter(Boolean));
+        return ['Todas', ...Array.from(locs)];
     }, [printers]);
+
+    // Estatísticas
+    const stats = useMemo(() => {
+        const online = printers.filter(p => p.status === 'Online' && !isOffline(p)).length;
+        const offline = printers.filter(p => p.status === 'Offline' || isOffline(p)).length;
+        const lowInk = printers.filter(p => p.ink_level !== null && p.ink_level < 20).length;
+        
+        return { online, offline, lowInk, total: printers.length };
+    }, [printers]);
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Spinner />
+            </div>
+        );
+    }
 
     return (
         <div>
             <div className="mb-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-                    <h2 className="text-2xl font-bold text-gray-800">Gerenciar Impressoras</h2>
-                    <Button onClick={openModalForNew}>
-                        <Plus className="w-5 h-5"/>
-                        Nova Impressora
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-800">Monitoramento de Impressoras</h2>
+                        <p className="text-sm text-gray-600 mt-1">
+                            Última atualização: {lastUpdate.toLocaleTimeString('pt-BR')}
+                        </p>
+                    </div>
+                    <Button onClick={handleManualRefresh} variant="secondary">
+                        <Activity className="w-5 h-5"/>
+                        Atualizar Agora
                     </Button>
                 </div>
 
-                {/* Alerta de Tinta Baixa */}
-                {lowInkCount > 0 && (
+                {/* Cards de Estatísticas */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <StatCard 
+                        title="Total" 
+                        value={stats.total} 
+                        icon={Printer} 
+                        colorClass="bg-blue-500" 
+                    />
+                    <StatCard 
+                        title="Online" 
+                        value={stats.online} 
+                        icon={CheckCircle} 
+                        colorClass="bg-green-500" 
+                    />
+                    <StatCard 
+                        title="Offline" 
+                        value={stats.offline} 
+                        icon={XCircle} 
+                        colorClass="bg-red-500" 
+                    />
+                    <StatCard 
+                        title="Tinta Baixa" 
+                        value={stats.lowInk} 
+                        icon={AlertTriangle} 
+                        colorClass="bg-yellow-500" 
+                    />
+                </div>
+
+                {/* Alertas */}
+                {stats.offline > 0 && (
                     <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
                         <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                         <div>
-                            <h3 className="font-semibold text-red-800">Atenção: Tinta Baixa!</h3>
+                            <h3 className="font-semibold text-red-800">Atenção: Impressoras Offline!</h3>
                             <p className="text-sm text-red-700">
-                                {lowInkCount} {lowInkCount === 1 ? 'impressora precisa' : 'impressoras precisam'} de reposição de tinta (≤ 20%)
+                                {stats.offline} {stats.offline === 1 ? 'impressora está' : 'impressoras estão'} offline ou sem comunicação há mais de 5 minutos.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {stats.lowInk > 0 && (
+                    <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
+                        <Droplet className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                            <h3 className="font-semibold text-yellow-800">Atenção: Tinta Baixa!</h3>
+                            <p className="text-sm text-yellow-700">
+                                {stats.lowInk} {stats.lowInk === 1 ? 'impressora precisa' : 'impressoras precisam'} de reposição de tinta (&lt; 20%).
                             </p>
                         </div>
                     </div>
@@ -1815,7 +1831,7 @@ const PrintersPage = () => {
                             type="text"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
-                            placeholder="Buscar por nome, modelo, localização ou IP..."
+                            placeholder="Buscar por nome, localização, IP ou computador..."
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         {searchTerm && (
@@ -1835,24 +1851,33 @@ const PrintersPage = () => {
                         <Filter className="text-gray-600 w-5 h-5" />
                         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                             <option value="Todas">Todos Status</option>
-                            <option value="ativa">✅ Ativa</option>
-                            <option value="manutencao">🔧 Manutenção</option>
-                            <option value="inativa">❌ Inativa</option>
+                            <option value="Online">✅ Online</option>
+                            <option value="Offline">❌ Offline</option>
+                            <option value="Offline-Timeout">⏰ Sem Comunicação</option>
                         </select>
                     </div>
 
-                    <select value={inkFilter} onChange={e => setInkFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="Todas">Todos Níveis de Tinta</option>
-                        <option value="Baixa">🟡 Tinta Baixa (≤ 20%)</option>
-                        <option value="Crítica">🔴 Tinta Crítica (≤ 10%)</option>
+                    <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="Todas">Todos Tipos</option>
+                        <option value="USB">🔌 USB</option>
+                        <option value="Rede">🌐 Rede</option>
                     </select>
 
-                    {(searchTerm || statusFilter !== 'Todas' || inkFilter !== 'Todas') && (
+                    <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        {locations.map(loc => (
+                            <option key={loc} value={loc}>
+                                {loc === 'Todas' ? 'Todas Localizações' : `📍 ${loc}`}
+                            </option>
+                        ))}
+                    </select>
+
+                    {(searchTerm || statusFilter !== 'Todas' || typeFilter !== 'Todas' || locationFilter !== 'Todas') && (
                         <button
                             onClick={() => {
                                 setSearchTerm('');
                                 setStatusFilter('Todas');
-                                setInkFilter('Todas');
+                                setTypeFilter('Todas');
+                                setLocationFilter('Todas');
                             }}
                             className="px-3 py-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
                         >
@@ -1867,124 +1892,175 @@ const PrintersPage = () => {
                 </div>
             </div>
             
+            {/* Tabela de Impressoras */}
             <Card>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50">
                             <tr className="border-b">
-                                <th className="p-2">Nome</th>
-                                <th className="p-2">Modelo</th>
-                                <th className="p-2">Localização</th>
-                                <th className="p-2">IP</th>
-                                <th className="p-2">Status</th>
-                                <th className="p-2">Ações</th>
+                                <th className="p-3 font-semibold text-gray-700">Nome</th>
+                                <th className="p-3 font-semibold text-gray-700">Tipo</th>
+                                <th className="p-3 font-semibold text-gray-700">IP/Porta</th>
+                                <th className="p-3 font-semibold text-gray-700">Status</th>
+                                <th className="p-3 font-semibold text-gray-700">Tinta</th>
+                                <th className="p-3 font-semibold text-gray-700">Última Verificação</th>
+                                <th className="p-3 font-semibold text-gray-700">Local</th>
+                                <th className="p-3 font-semibold text-gray-700">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredPrinters.map(printer => (
                                 <React.Fragment key={printer.id}>
-                                    <tr className="border-b hover:bg-gray-50">
-                                        <td className="p-2">
+                                    <tr className="border-b hover:bg-gray-50 transition-colors">
+                                        <td className="p-3">
                                             <div className="flex items-center gap-2">
-                                                <span className="font-medium">{printer.nome}</span>
-                                                {hasLowInk(printer) && (
-                                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold" title="Tinta baixa">
-                                                        <Droplet className="w-3 h-3" />
-                                                        Baixa
-                                                    </span>
-                                                )}
+                                                <Printer className="w-4 h-4 text-gray-400" />
+                                                <span className="font-medium text-gray-800">{printer.name}</span>
                                             </div>
                                         </td>
-                                        <td className="p-2">{printer.modelo}</td>
-                                        <td className="p-2">{printer.localizacao}</td>
-                                        <td className="p-2">{printer.ip}</td>
-                                        <td className="p-2">
+                                        <td className="p-3">
                                             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                printer.status === 'ativa' ? 'bg-green-100 text-green-800' : 
-                                                printer.status === 'manutencao' ? 'bg-yellow-100 text-yellow-800' : 
-                                                'bg-red-100 text-red-800'
+                                                printer.type === 'USB' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
                                             }`}>
-                                                {printer.status === 'ativa' ? 'Ativa' : 
-                                                 printer.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
+                                                {printer.type === 'USB' ? '🔌 USB' : '🌐 Rede'}
                                             </span>
                                         </td>
-                                        <td className="p-2 flex gap-2">
+                                        <td className="p-3 text-gray-600">
+                                            {printer.ip || printer.usb_port || 'N/A'}
+                                        </td>
+                                        <td className="p-3">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(printer)}`}>
+                                                {isOffline(printer) ? '⏰ Sem Comunicação' : printer.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-3">
+                                            {printer.ink_level !== null && printer.ink_level !== undefined ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-16 bg-gray-200 rounded-full h-2">
+                                                        <div 
+                                                            className={`h-2 rounded-full transition-all ${
+                                                                printer.ink_level < 20 ? 'bg-red-500' : 
+                                                                printer.ink_level < 50 ? 'bg-yellow-500' : 'bg-green-500'
+                                                            }`}
+                                                            style={{ width: `${printer.ink_level}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-xs font-semibold text-gray-700">{printer.ink_level}%</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-400">N/A</span>
+                                            )}
+                                        </td>
+                                        <td className="p-3 text-gray-600 text-xs">
+                                            {formatLastCheck(printer)}
+                                        </td>
+                                        <td className="p-3 text-gray-600">
+                                            <div className="text-xs">
+                                                <div className="font-medium">{printer.location}</div>
+                                                <div className="text-gray-400">{printer.registered_by}</div>
+                                            </div>
+                                        </td>
+                                        <td className="p-3">
                                             <button 
                                                 onClick={() => setExpandedPrinter(expandedPrinter === printer.id ? null : printer.id)} 
-                                                className="text-gray-600 hover:text-gray-800"
+                                                className="text-blue-600 hover:text-blue-800 transition-colors"
                                                 title="Ver detalhes"
                                             >
                                                 <ChevronDown className={`w-5 h-5 transition-transform ${expandedPrinter === printer.id ? 'rotate-180' : ''}`}/>
                                             </button>
-                                            <button onClick={() => openModalForEdit(printer)} className="text-blue-600 hover:text-blue-800">
-                                                <Edit className="w-5 h-5"/>
-                                            </button>
-                                            <button onClick={() => handleDeletePrinter(printer.id)} className="text-red-600 hover:text-red-800">
-                                                <Trash2 className="w-5 h-5"/>
-                                            </button>
                                         </td>
                                     </tr>
                                     {expandedPrinter === printer.id && (
-                                        <tr className="bg-gray-50">
-                                            <td colSpan="6" className="p-4">
-                                                <div className="space-y-3">
-                                                    <div>
-                                                        <h4 className="font-semibold text-gray-700 mb-2">Níveis de Tinta</h4>
-                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                            <div>
-                                                                <div className="flex justify-between text-xs mb-1">
-                                                                    <span className="text-gray-600">Preta</span>
-                                                                    <span className="font-semibold">{printer.tintaPreta || 100}%</span>
-                                                                </div>
-                                                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                                                    <div 
-                                                                        className="bg-gray-800 h-2 rounded-full" 
-                                                                        style={{ width: `${printer.tintaPreta || 100}%` }}
-                                                                    />
-                                                                </div>
+                                        <tr className="bg-blue-50 border-b">
+                                            <td colSpan="8" className="p-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="bg-white rounded-lg p-4 shadow-sm">
+                                                        <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                                            <FileTextIcon className="w-4 h-4" />
+                                                            Informações Detalhadas
+                                                        </h4>
+                                                        <div className="space-y-2 text-sm">
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Nome:</span>
+                                                                <span className="font-medium">{printer.name}</span>
                                                             </div>
-                                                            <div>
-                                                                <div className="flex justify-between text-xs mb-1">
-                                                                    <span className="text-gray-600">Ciano</span>
-                                                                    <span className="font-semibold">{printer.tintaCiano || 100}%</span>
-                                                                </div>
-                                                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                                                    <div 
-                                                                        className="bg-cyan-500 h-2 rounded-full" 
-                                                                        style={{ width: `${printer.tintaCiano || 100}%` }}
-                                                                    />
-                                                                </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Tipo:</span>
+                                                                <span className="font-medium">{printer.type}</span>
                                                             </div>
-                                                            <div>
-                                                                <div className="flex justify-between text-xs mb-1">
-                                                                    <span className="text-gray-600">Magenta</span>
-                                                                    <span className="font-semibold">{printer.tintaMagenta || 100}%</span>
+                                                            {printer.ip && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-600">IP:</span>
+                                                                    <span className="font-medium font-mono">{printer.ip}</span>
                                                                 </div>
-                                                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                                                    <div 
-                                                                        className="bg-pink-500 h-2 rounded-full" 
-                                                                        style={{ width: `${printer.tintaMagenta || 100}%` }}
-                                                                    />
+                                                            )}
+                                                            {printer.usb_port && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-600">Porta USB:</span>
+                                                                    <span className="font-medium font-mono">{printer.usb_port}</span>
                                                                 </div>
+                                                            )}
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Status:</span>
+                                                                <span className="font-medium">{printer.status}</span>
                                                             </div>
-                                                            <div>
-                                                                <div className="flex justify-between text-xs mb-1">
-                                                                    <span className="text-gray-600">Amarela</span>
-                                                                    <span className="font-semibold">{printer.tintaAmarela || 100}%</span>
-                                                                </div>
-                                                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                                                    <div 
-                                                                        className="bg-yellow-400 h-2 rounded-full" 
-                                                                        style={{ width: `${printer.tintaAmarela || 100}%` }}
-                                                                    />
-                                                                </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Local:</span>
+                                                                <span className="font-medium">{printer.location}</span>
                                                             </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-600">Registrado por:</span>
+                                                                <span className="font-medium">{printer.registered_by}</span>
+                                                            </div>
+                                                            {printer.last_check && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-600">Última verificação:</span>
+                                                                    <span className="font-medium">
+                                                                        {(printer.last_check.toDate ? printer.last_check.toDate() : new Date(printer.last_check)).toLocaleString('pt-BR')}
+                                                                    </span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                    {printer.observacoes && (
-                                                        <div>
-                                                            <h4 className="font-semibold text-gray-700 mb-1">Observações</h4>
-                                                            <p className="text-sm text-gray-600 bg-white p-2 rounded border">{printer.observacoes}</p>
+                                                    
+                                                    {printer.ink_level !== null && printer.ink_level !== undefined && (
+                                                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                                                            <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                                                <Droplet className="w-4 h-4" />
+                                                                Nível de Tinta/Toner
+                                                            </h4>
+                                                            <div className="flex items-center justify-center">
+                                                                <div className="relative w-32 h-32">
+                                                                    <svg viewBox="0 0 100 100" className="transform -rotate-90">
+                                                                        <circle
+                                                                            cx="50"
+                                                                            cy="50"
+                                                                            r="40"
+                                                                            fill="transparent"
+                                                                            stroke="#E5E7EB"
+                                                                            strokeWidth="8"
+                                                                        />
+                                                                        <circle
+                                                                            cx="50"
+                                                                            cy="50"
+                                                                            r="40"
+                                                                            fill="transparent"
+                                                                            stroke={printer.ink_level < 20 ? '#EF4444' : printer.ink_level < 50 ? '#F59E0B' : '#10B981'}
+                                                                            strokeWidth="8"
+                                                                            strokeDasharray={`${printer.ink_level * 2.51} 251`}
+                                                                            strokeLinecap="round"
+                                                                        />
+                                                                    </svg>
+                                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                                        <div className="text-center">
+                                                                            <div className="text-2xl font-bold text-gray-800">{printer.ink_level}%</div>
+                                                                            <div className="text-xs text-gray-500">
+                                                                                {printer.ink_level < 20 ? 'Crítico' : printer.ink_level < 50 ? 'Baixo' : 'OK'}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -1996,146 +2072,29 @@ const PrintersPage = () => {
                         </tbody>
                     </table>
                     {printers.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                            Nenhuma impressora cadastrada. Clique em "Nova Impressora" para adicionar.
+                        <div className="text-center py-12 text-gray-500">
+                            <Printer className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                            <p className="text-lg font-semibold mb-2">Nenhuma impressora detectada</p>
+                            <p className="text-sm">
+                                As impressoras aparecerão aqui automaticamente quando o agente de monitoramento estiver ativo.
+                            </p>
+                            <div className="mt-4 p-4 bg-blue-50 rounded-lg inline-block text-left">
+                                <p className="text-sm text-blue-800 font-semibold mb-2">💡 Como ativar o monitoramento:</p>
+                                <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                                    <li>Acesse a pasta <code className="bg-blue-100 px-1 rounded">/agent</code></li>
+                                    <li>Configure o arquivo <code className="bg-blue-100 px-1 rounded">config.json</code></li>
+                                    <li>Execute <code className="bg-blue-100 px-1 rounded">npm start</code></li>
+                                </ol>
+                            </div>
                         </div>
                     ) : filteredPrinters.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
-                            Nenhuma impressora encontrada com os filtros aplicados.
+                            <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                            <p>Nenhuma impressora encontrada com os filtros aplicados.</p>
                         </div>
                     ) : null}
                 </div>
             </Card>
-
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentPrinter ? 'Editar Impressora' : 'Nova Impressora'} size="lg">
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-                            <Input name="nome" value={formState.nome} onChange={handleFormChange} placeholder="Ex: Impressora Recepção" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Modelo *</label>
-                            <Input name="modelo" value={formState.modelo} onChange={handleFormChange} placeholder="Ex: HP LaserJet Pro M404" />
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Localização</label>
-                            <Input name="localizacao" value={formState.localizacao} onChange={handleFormChange} placeholder="Ex: Sala 101" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Endereço IP</label>
-                            <Input name="ip" value={formState.ip} onChange={handleFormChange} placeholder="Ex: 192.168.1.100" />
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                        <select name="status" value={formState.status} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option value="ativa">Ativa</option>
-                            <option value="manutencao">Manutenção</option>
-                            <option value="inativa">Inativa</option>
-                        </select>
-                    </div>
-
-                    <div className="border-t pt-4">
-                        <h4 className="font-semibold text-gray-700 mb-3">Níveis de Tinta (%)</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Preta</label>
-                                <Input 
-                                    type="number" 
-                                    name="tintaPreta" 
-                                    value={formState.tintaPreta} 
-                                    onChange={handleFormChange} 
-                                    placeholder="0-100"
-                                    min="0"
-                                    max="100"
-                                />
-                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                        className="bg-gray-800 h-2 rounded-full transition-all" 
-                                        style={{ width: `${formState.tintaPreta}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Ciano</label>
-                                <Input 
-                                    type="number" 
-                                    name="tintaCiano" 
-                                    value={formState.tintaCiano} 
-                                    onChange={handleFormChange} 
-                                    placeholder="0-100"
-                                    min="0"
-                                    max="100"
-                                />
-                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                        className="bg-cyan-500 h-2 rounded-full transition-all" 
-                                        style={{ width: `${formState.tintaCiano}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Magenta</label>
-                                <Input 
-                                    type="number" 
-                                    name="tintaMagenta" 
-                                    value={formState.tintaMagenta} 
-                                    onChange={handleFormChange} 
-                                    placeholder="0-100"
-                                    min="0"
-                                    max="100"
-                                />
-                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                        className="bg-pink-500 h-2 rounded-full transition-all" 
-                                        style={{ width: `${formState.tintaMagenta}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Amarela</label>
-                                <Input 
-                                    type="number" 
-                                    name="tintaAmarela" 
-                                    value={formState.tintaAmarela} 
-                                    onChange={handleFormChange} 
-                                    placeholder="0-100"
-                                    min="0"
-                                    max="100"
-                                />
-                                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                        className="bg-yellow-400 h-2 rounded-full transition-all" 
-                                        style={{ width: `${formState.tintaAmarela}%` }}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Observações / Problemas</label>
-                        <textarea 
-                            name="observacoes" 
-                            value={formState.observacoes} 
-                            onChange={handleFormChange} 
-                            rows="3" 
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                            placeholder="Anote aqui problemas, manutenções necessárias, etc..."
-                        ></textarea>
-                    </div>
-
-                    <div className="flex justify-end gap-2 pt-4 border-t">
-                        <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleFormSubmit}>Salvar Impressora</Button>
-                    </div>
-                </div>
-            </Modal>
         </div>
     );
 };

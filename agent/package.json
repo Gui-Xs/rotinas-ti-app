@@ -1,0 +1,22 @@
+{
+  "name": "printer-monitor-agent",
+  "version": "1.0.0",
+  "description": "Agente local para monitoramento de impressoras USB e de rede",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "setup": "node setup.js"
+  },
+  "keywords": ["printer", "monitor", "firebase", "network"],
+  "author": "HPAES TI",
+  "license": "MIT",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "node-printer": "^1.0.1",
+    "ping": "^0.4.4",
+    "snmp-native": "^1.1.1",
+    "dotenv": "^16.4.5"
+  }
+}

@@ -10,7 +10,8 @@ Sistema de gerenciamento de rotinas de TI desenvolvido com React, Firebase e Tai
 - 📝 **Checklist de Rotinas**: Gerenciamento de rotinas diárias, semanais e mensais
 - 📸 **Evidências Fotográficas**: Upload de fotos como comprovação de execução
 - 📊 **Histórico Completo**: Registro detalhado de todas as execuções com filtros avançados
-- 👥 **Gestão de Usuários**: Sistema de permissões (Admin/Técnico)
+- 🖨️ **Monitoramento de Impressoras**: Sistema automático de detecção e monitoramento de impressoras USB e de rede em tempo real
+- 👥 **Gestão de Usuários**: Sistema de permissões (Admin/Técnico/Estagiário)
 - 🔐 **Autenticação Segura**: Login com Firebase Authentication
 - 📱 **Design Responsivo**: Interface adaptada para desktop e mobile
 
@@ -193,6 +194,41 @@ Os arquivos otimizados serão gerados na pasta `dist/`
 - `npm run build` - Cria build de produção
 - `npm run preview` - Visualiza o build de produção localmente
 - `npm run deploy` - Deploy manual para GitHub Pages (após configurar)
+
+## 🖨️ Sistema de Monitoramento de Impressoras
+
+O sistema inclui um **agente local** que detecta e monitora impressoras automaticamente.
+
+### Recursos
+
+- 🔍 **Detecção Automática**: Impressoras USB e de rede
+- 📊 **Monitoramento em Tempo Real**: Status, IP, nível de tinta
+- 🌐 **Interface Web**: Visualização completa com filtros e alertas
+- ⚡ **Sincronização Automática**: Dados enviados para Firebase a cada 60s
+- 🚨 **Alertas Inteligentes**: Notificações para impressoras offline ou com tinta baixa
+
+### Início Rápido
+
+```bash
+# Navegar até a pasta do agente
+cd agent
+
+# Instalar dependências
+npm install
+
+# Configurar (interativo)
+npm run setup
+
+# Iniciar monitoramento
+npm start
+```
+
+### Documentação Completa
+
+- 📖 **[PRINTER_MONITORING.md](./PRINTER_MONITORING.md)** - Documentação completa do sistema
+- 🚀 **[agent/QUICK_START.md](./agent/QUICK_START.md)** - Guia rápido de início
+- 📋 **[agent/README.md](./agent/README.md)** - Documentação do agente
+- ✅ **[IMPLEMENTACAO_COMPLETA.md](./IMPLEMENTACAO_COMPLETA.md)** - Resumo da implementação
 
 ## 🌐 Deploy no GitHub Pages
 
