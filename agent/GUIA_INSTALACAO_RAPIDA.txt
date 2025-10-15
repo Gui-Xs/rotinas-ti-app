@@ -1,0 +1,260 @@
+════════════════════════════════════════════════════════════════════
+  🖨️  GUIA RÁPIDO - INSTALAR AGENTE EM OUTROS COMPUTADORES
+════════════════════════════════════════════════════════════════════
+
+📋 RESUMO: 3 PASSOS SIMPLES
+
+1️⃣  COPIAR a pasta "agent" para o outro PC
+2️⃣  INSTALAR as dependências (npm install)
+3️⃣  CONFIGURAR e iniciar (npm run setup + npm start)
+
+════════════════════════════════════════════════════════════════════
+
+🎯 MÉTODO MAIS FÁCIL - USAR O INSTALADOR AUTOMÁTICO
+
+NO SEU COMPUTADOR (onde está o projeto):
+───────────────────────────────────────────────────────────────────
+
+1. Copie a pasta inteira "agent" para um pendrive:
+   
+   📁 De: C:\Users\igor rodrigues\CascadeProjects\rotinas-ti-app\agent
+   📁 Para: E:\agent (pendrive)
+
+
+NO COMPUTADOR DE DESTINO (onde vai instalar):
+───────────────────────────────────────────────────────────────────
+
+1. Cole a pasta do pendrive no computador:
+   
+   📁 Para: C:\agent (ou qualquer lugar)
+
+2. Entre na pasta e execute INSTALAR.bat:
+   
+   - Clique com botão direito em "INSTALAR.bat"
+   - Escolha "Executar como administrador"
+   - Siga as instruções na tela
+
+3. Pronto! O instalador vai:
+   ✅ Copiar arquivos para C:\printer-monitor-agent
+   ✅ Instalar dependências automaticamente
+   ✅ Perguntar se quer configurar agora
+
+════════════════════════════════════════════════════════════════════
+
+🎯 MÉTODO MANUAL (se preferir fazer passo a passo)
+
+NO COMPUTADOR DE DESTINO:
+───────────────────────────────────────────────────────────────────
+
+1. COPIAR a pasta "agent" para:
+   C:\printer-monitor-agent
+
+2. ABRIR o CMD (Win + R → cmd → Enter)
+
+3. NAVEGAR até a pasta:
+   cd C:\printer-monitor-agent
+
+4. INSTALAR dependências:
+   npm install
+   
+   ⏳ Aguarde 2-3 minutos
+
+5. CONFIGURAR o agente:
+   npm run setup
+   
+   📝 Preencha:
+   
+   ┌─────────────────────────────────────────────────────────────┐
+   │ Firebase Project ID:                                         │
+   │ → rotinas-ti-hpaes                                          │
+   │                                                              │
+   │ Firebase Client Email:                                       │
+   │ → firebase-adminsdk-xxxxx@rotinas-ti-hpaes.iam...          │
+   │                                                              │
+   │ Firebase Private Key:                                        │
+   │ → Cole a chave completa (BEGIN...END)                       │
+   │ → Pressione Enter DUAS VEZES                                │
+   │                                                              │
+   │ Nome deste computador:                                       │
+   │ → PC da Recepção  ← DIFERENTE EM CADA PC!                  │
+   │                                                              │
+   │ Local/Setor:                                                │
+   │ → Recepção  ← DIFERENTE EM CADA PC!                        │
+   │                                                              │
+   │ Intervalo (segundos):                                        │
+   │ → 60 (ou Enter para padrão)                                 │
+   │                                                              │
+   │ Impressoras de rede? (s/N):                                 │
+   │ → n (ou adicione se tiver)                                  │
+   └─────────────────────────────────────────────────────────────┘
+
+6. INICIAR o monitoramento:
+   npm start
+   
+   ✅ Você verá:
+   
+   🚀 AGENTE DE MONITORAMENTO DE IMPRESSORAS INICIADO
+   ✅ Configurações carregadas com sucesso
+   📍 Computador: PC da Recepção
+   🖨️  Detectadas X impressoras USB
+   ✅ X/X impressoras sincronizadas com sucesso
+
+════════════════════════════════════════════════════════════════════
+
+⚠️  IMPORTANTE - CONFIGURAÇÃO EM MÚLTIPLOS PCS
+
+MESMAS CREDENCIAIS DO FIREBASE (em todos os PCs):
+───────────────────────────────────────────────────────────────────
+✅ Firebase Project ID: rotinas-ti-hpaes
+✅ Firebase Client Email: firebase-adminsdk-xxxxx@...
+✅ Firebase Private Key: -----BEGIN PRIVATE KEY----- ...
+
+
+INFORMAÇÕES DIFERENTES (em cada PC):
+───────────────────────────────────────────────────────────────────
+❌ Nome do Computador: DEVE SER ÚNICO!
+   - PC 1: "PC da Recepção"
+   - PC 2: "PC Consultório 1"
+   - PC 3: "PC Consultório 2"
+   - PC 4: "PC Sala de TI"
+
+❌ Local/Setor: DEVE IDENTIFICAR O SETOR!
+   - PC 1: "Recepção"
+   - PC 2: "Consultório 1"
+   - PC 3: "Consultório 2"
+   - PC 4: "TI"
+
+════════════════════════════════════════════════════════════════════
+
+🖥️  EXECUTAR AUTOMATICAMENTE COM O WINDOWS
+
+Para o agente iniciar sozinho quando ligar o PC:
+───────────────────────────────────────────────────────────────────
+
+1. Win + R → digite: taskschd.msc → Enter
+
+2. Criar Tarefa Básica
+
+3. Nome: Monitor de Impressoras
+
+4. Disparador: Ao fazer logon
+
+5. Ação: Iniciar um programa
+   
+   Programa:    C:\Program Files\nodejs\node.exe
+   Argumentos:  index.js
+   Iniciar em:  C:\printer-monitor-agent
+
+6. Marcar: ✅ Executar com privilégios mais altos
+
+7. Concluir
+
+Pronto! O agente iniciará automaticamente ao fazer login.
+
+════════════════════════════════════════════════════════════════════
+
+✅ VERIFICAR SE ESTÁ FUNCIONANDO
+
+NO CONSOLE (onde o agente está rodando):
+───────────────────────────────────────────────────────────────────
+Deve aparecer:
+✅ X/X impressoras sincronizadas com sucesso
+⏰ Próxima verificação em 60s
+
+
+NO APP WEB (navegador):
+───────────────────────────────────────────────────────────────────
+1. Acesse o app Rotinas TI
+2. Vá na página "Impressoras"
+3. As impressoras deste PC aparecerão na tabela!
+
+Exemplo:
+┌──────────────────┬──────┬──────────────┬────────┐
+│ Nome             │ Tipo │ Computador   │ Status │
+├──────────────────┼──────┼──────────────┼────────┤
+│ Impressora HP    │ USB  │ PC Recepção  │ Online │
+│ Impressora Canon │ USB  │ PC Consult 1 │ Online │
+└──────────────────┴──────┴──────────────┴────────┘
+
+════════════════════════════════════════════════════════════════════
+
+📦 EXEMPLO PRÁTICO - INSTALAR EM 3 COMPUTADORES
+
+COMPUTADOR 1 - RECEPÇÃO:
+───────────────────────────────────────────────────────────────────
+Nome do computador: PC da Recepção
+Local: Recepção
+→ Vai monitorar impressoras conectadas na recepção
+
+
+COMPUTADOR 2 - CONSULTÓRIO 1:
+───────────────────────────────────────────────────────────────────
+Nome do computador: PC Consultório 1
+Local: Consultório 1
+→ Vai monitorar impressoras do consultório 1
+
+
+COMPUTADOR 3 - SALA DE TI:
+───────────────────────────────────────────────────────────────────
+Nome do computador: PC Sala TI
+Local: TI
+→ Vai monitorar impressoras da sala de TI
+
+
+RESULTADO NO APP WEB:
+───────────────────────────────────────────────────────────────────
+Você verá TODAS as impressoras dos 3 PCs em uma única tela!
+
+════════════════════════════════════════════════════════════════════
+
+🐛 PROBLEMAS COMUNS
+
+"npm não é reconhecido"
+───────────────────────────────────────────────────────────────────
+→ Instale o Node.js: https://nodejs.org/
+
+
+"Nenhuma impressora detectada"
+───────────────────────────────────────────────────────────────────
+→ Execute o CMD como Administrador
+→ Verifique se há impressoras conectadas
+
+
+"Erro ao inicializar Firebase"
+───────────────────────────────────────────────────────────────────
+→ Verifique as credenciais em config.json
+→ Certifique-se de que copiou a chave completa
+
+
+"Impressoras não aparecem no app web"
+───────────────────────────────────────────────────────────────────
+→ Aguarde 1 minuto para sincronização
+→ Verifique se o agente está rodando (npm start)
+→ Verifique conexão com internet
+
+════════════════════════════════════════════════════════════════════
+
+📞 PRECISA DE AJUDA?
+
+Documentação completa:
+- INSTALACAO_OUTROS_PCS.md - Guia detalhado
+- PRIMEIRO_USO.txt - Instruções passo a passo
+- README.md - Documentação técnica
+- QUICK_START.md - Guia rápido
+
+════════════════════════════════════════════════════════════════════
+
+💡 DICA FINAL
+
+Instale primeiro em 1 PC de teste para se familiarizar com o
+processo. Depois replique para os outros PCs.
+
+O processo é sempre o mesmo:
+1. Copiar pasta
+2. npm install
+3. npm run setup (com nome único!)
+4. npm start
+
+════════════════════════════════════════════════════════════════════
+
+Desenvolvido para HPAES TI 🏥

@@ -1,0 +1,212 @@
+═══════════════════════════════════════════════════════════════
+  🖨️  SISTEMA DE MONITORAMENTO DE IMPRESSORAS - PRIMEIRO USO
+═══════════════════════════════════════════════════════════════
+
+📋 CHECKLIST DE INSTALAÇÃO
+
+[ ] 1. Node.js instalado (versão 16+)
+[ ] 2. Credenciais do Firebase obtidas
+[ ] 3. Acesso ao computador onde as impressoras estão conectadas
+
+═══════════════════════════════════════════════════════════════
+
+🚀 PASSO A PASSO
+
+1️⃣  ABRIR TERMINAL
+   - Pressione Win + R
+   - Digite: cmd
+   - Enter
+
+2️⃣  NAVEGAR ATÉ A PASTA DO AGENTE
+   cd C:\Users\igor rodrigues\CascadeProjects\rotinas-ti-app\agent
+
+3️⃣  INSTALAR DEPENDÊNCIAS
+   npm install
+   
+   ⏳ Aguarde a instalação (pode levar alguns minutos)
+
+4️⃣  CONFIGURAR O AGENTE
+   npm run setup
+   
+   📝 Você será perguntado:
+   
+   ┌─────────────────────────────────────────────────────────┐
+   │ Firebase Project ID:                                     │
+   │ → Digite o ID do projeto (ex: rotinas-ti-hpaes)        │
+   │                                                          │
+   │ Firebase Client Email:                                   │
+   │ → Digite o email (ex: firebase-adminsdk-...@...)       │
+   │                                                          │
+   │ Cole a Private Key:                                      │
+   │ → Cole toda a chave (incluindo BEGIN e END)            │
+   │ → Pressione Enter DUAS VEZES quando terminar           │
+   │                                                          │
+   │ Nome deste computador:                                   │
+   │ → Ex: "PC da Recepção"                                  │
+   │                                                          │
+   │ Local/Setor:                                            │
+   │ → Ex: "Recepção"                                        │
+   │                                                          │
+   │ Intervalo de verificação (segundos):                    │
+   │ → Pressione Enter para usar 60 segundos                │
+   │                                                          │
+   │ Deseja adicionar impressoras de rede? (s/N):           │
+   │ → Digite "s" se tiver impressoras de rede              │
+   │ → Digite "n" ou Enter se não tiver                     │
+   └─────────────────────────────────────────────────────────┘
+
+5️⃣  INICIAR O MONITORAMENTO
+   npm start
+   
+   ✅ Você verá:
+   
+   🚀 AGENTE DE MONITORAMENTO DE IMPRESSORAS INICIADO
+   ═══════════════════════════════════════════════════════
+   ✅ Configurações carregadas com sucesso
+   📍 Computador: PC da Recepção
+   📍 Local: Recepção
+   ✅ Firebase inicializado com sucesso
+   
+   🔍 Iniciando verificação...
+   🖨️  Detectadas X impressoras USB
+   🌐 Verificando X impressoras de rede...
+   📤 Enviando X impressoras para o Firebase...
+   ✅ X/X impressoras sincronizadas com sucesso
+
+6️⃣  VERIFICAR NO APP WEB
+   - Abra o navegador
+   - Acesse o app web
+   - Vá na página "Impressoras"
+   - As impressoras aparecerão automaticamente!
+
+═══════════════════════════════════════════════════════════════
+
+🔑 ONDE OBTER AS CREDENCIAIS DO FIREBASE
+
+1. Acesse: https://console.firebase.google.com/
+2. Selecione seu projeto
+3. Clique no ícone de engrenagem ⚙️ → "Configurações do projeto"
+4. Vá na aba "Contas de serviço"
+5. Clique em "Gerar nova chave privada"
+6. Salve o arquivo JSON
+7. Abra o arquivo e copie:
+   
+   ┌─────────────────────────────────────────────────────────┐
+   │ {                                                        │
+   │   "project_id": "rotinas-ti-hpaes",      ← Project ID  │
+   │   "private_key": "-----BEGIN...",         ← Private Key │
+   │   "client_email": "firebase-adminsdk..." ← Client Email│
+   │ }                                                        │
+   └─────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+
+🌐 ADICIONAR IMPRESSORAS DE REDE (OPCIONAL)
+
+Se você tem impressoras de rede, adicione-as durante o setup ou
+edite o arquivo config.json depois:
+
+1. Abra: config.json
+2. Localize: "networkPrinters": []
+3. Adicione:
+
+   "networkPrinters": [
+     {
+       "name": "Impressora Consultório 1",
+       "ip": "192.168.0.100",
+       "snmpCommunity": "public"
+     },
+     {
+       "name": "Impressora Recepção",
+       "ip": "192.168.0.101",
+       "snmpCommunity": "public"
+     }
+   ]
+
+4. Salve o arquivo
+5. Reinicie o agente (Ctrl+C e npm start)
+
+═══════════════════════════════════════════════════════════════
+
+🖥️  EXECUTAR AUTOMATICAMENTE COM O WINDOWS
+
+OPÇÃO 1: Agendador de Tarefas
+
+1. Pressione Win + R → digite: taskschd.msc
+2. Criar Tarefa Básica
+3. Nome: "Monitor de Impressoras"
+4. Disparador: "Ao fazer logon"
+5. Ação: "Iniciar um programa"
+   - Programa: C:\Program Files\nodejs\node.exe
+   - Argumentos: index.js
+   - Iniciar em: C:\Users\igor rodrigues\CascadeProjects\rotinas-ti-app\agent
+6. Finalizar
+
+OPÇÃO 2: NSSM (Serviço do Windows)
+
+1. Baixe NSSM: https://nssm.cc/download
+2. Extraia o arquivo
+3. Abra CMD como Administrador
+4. Execute:
+
+   cd C:\caminho\para\nssm\win64
+   
+   nssm install PrinterMonitor "C:\Program Files\nodejs\node.exe" "C:\Users\igor rodrigues\CascadeProjects\rotinas-ti-app\agent\index.js"
+   
+   nssm set PrinterMonitor AppDirectory "C:\Users\igor rodrigues\CascadeProjects\rotinas-ti-app\agent"
+   
+   nssm start PrinterMonitor
+
+═══════════════════════════════════════════════════════════════
+
+❓ PROBLEMAS COMUNS
+
+PROBLEMA: "npm não é reconhecido"
+SOLUÇÃO: Instale o Node.js de https://nodejs.org/
+
+PROBLEMA: "Erro ao carregar config.json"
+SOLUÇÃO: Execute "npm run setup" novamente
+
+PROBLEMA: "Nenhuma impressora detectada"
+SOLUÇÃO: 
+  - Execute como Administrador
+  - Verifique se há impressoras conectadas
+  - Verifique os IPs das impressoras de rede
+
+PROBLEMA: "Erro ao inicializar Firebase"
+SOLUÇÃO: Verifique as credenciais em config.json
+
+PROBLEMA: "Impressoras não aparecem no app web"
+SOLUÇÃO:
+  - Verifique se o agente está rodando
+  - Verifique a conexão com a internet
+  - Aguarde 1 minuto para sincronização
+
+═══════════════════════════════════════════════════════════════
+
+📞 PRECISA DE AJUDA?
+
+Consulte a documentação completa:
+- agent/README.md - Documentação do agente
+- agent/QUICK_START.md - Guia rápido
+- PRINTER_MONITORING.md - Sistema completo
+
+Ou entre em contato com a equipe de TI do HPAES.
+
+═══════════════════════════════════════════════════════════════
+
+✅ PRONTO!
+
+Seu sistema de monitoramento de impressoras está configurado!
+
+O agente detectará automaticamente:
+✓ Impressoras USB conectadas a este computador
+✓ Impressoras de rede configuradas
+✓ Status (Online/Offline)
+✓ Nível de tinta (quando disponível)
+
+E enviará tudo para o Firebase em tempo real!
+
+═══════════════════════════════════════════════════════════════
+
+Desenvolvido para HPAES TI 🏥

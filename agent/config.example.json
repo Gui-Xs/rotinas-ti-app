@@ -1,0 +1,23 @@
+{
+  "firebase": {
+    "projectId": "seu-project-id",
+    "privateKey": "-----BEGIN PRIVATE KEY-----\nSUA_CHAVE_PRIVADA_AQUI\n-----END PRIVATE KEY-----\n",
+    "clientEmail": "firebase-adminsdk-xxxxx@seu-project-id.iam.gserviceaccount.com"
+  },
+  "appId": "rotinas-ti-hpaes",
+  "computerName": "PC da Recepção",
+  "location": "Recepção",
+  "checkInterval": 60000,
+  "networkPrinters": [
+    {
+      "name": "Impressora Rede 1",
+      "ip": "192.168.0.100",
+      "snmpCommunity": "public"
+    },
+    {
+      "name": "Impressora Rede 2",
+      "ip": "192.168.0.101",
+      "snmpCommunity": "public"
+    }
+  ]
+}
