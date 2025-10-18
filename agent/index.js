@@ -42,7 +42,7 @@ async function loadConfig() {
       throw new Error('computerName e location são obrigatórios em config.json');
     }
     
-    appId = config.appId || 'rotinas-ti-hpaes';
+    appId = config.appId || 'rotinas-ti-app';
     
     console.log('✅ Configurações carregadas com sucesso');
     console.log(`📍 Computador: ${config.computerName}`);
@@ -184,35 +184,129 @@ async function checkHostOnline(ip) {
 async function getSNMPInfo(ip, community = 'public') {
   return new Promise((resolve) => {
     try {
-      const session = new snmp.Session({ host: ip, community, timeout: 3000 });
+      const session = new snmp.Session({ host: ip, community, timeout: 5000 });
       
       // OIDs padrão para impressoras
       const oids = {
         sysDescr: [1, 3, 6, 1, 2, 1, 1, 1, 0], // Descrição do sistema
         hrPrinterStatus: [1, 3, 6, 1, 2, 1, 25, 3, 5, 1, 1, 1], // Status da impressora
-        // OIDs para níveis de tinta (variam por fabricante)
-        prtMarkerSuppliesLevel: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 1], // Nível de suprimento
+        // OIDs para níveis de tinta/toner
+        prtMarkerSuppliesLevel: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 1], // Nível atual
+        prtMarkerSuppliesMaxCapacity: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 8, 1, 1], // Capacidade máxima
       };
       
       session.getAll({ oids: Object.values(oids) }, (error, varbinds) => {
         session.close();
         
         if (error) {
+          console.log(`  ⚠️  SNMP não disponível para ${ip}: ${error.message}`);
           resolve({ available: false });
           return;
+        }
+        
+        console.log(`  📊 SNMP Response para ${ip}:`, {
+          description: varbinds[0]?.value?.toString() || 'N/A',
+          status: varbinds[1]?.value,
+          currentLevel: varbinds[2]?.value,
+          maxCapacity: varbinds[3]?.value,
+        });
+        
+        // Calcular percentual de tinta
+        let inkLevel = null;
+        const currentLevel = varbinds[2]?.value;
+        const maxCapacity = varbinds[3]?.value;
+        
+        if (currentLevel !== null && currentLevel !== undefined) {
+          if (maxCapacity && maxCapacity > 0) {
+            // Calcular percentual baseado na capacidade máxima
+            inkLevel = Math.round((currentLevel / maxCapacity) * 100);
+            console.log(`  🖋️  Tinta calculada: ${currentLevel}/${maxCapacity} = ${inkLevel}%`);
+          } else if (currentLevel >= 0 && currentLevel <= 100) {
+            // Valor já é percentual
+            inkLevel = currentLevel;
+            console.log(`  🖋️  Tinta (percentual direto): ${inkLevel}%`);
+          } else if (currentLevel > 100) {
+            // Valor pode ser em outra escala (ex: 0-255)
+            inkLevel = Math.round((currentLevel / 255) * 100);
+            console.log(`  🖋️  Tinta (escala 255): ${currentLevel} = ${inkLevel}%`);
+          }
+          
+          // Garantir que está entre 0-100
+          inkLevel = Math.max(0, Math.min(100, inkLevel));
         }
         
         const info = {
           available: true,
           description: varbinds[0]?.value?.toString() || 'N/A',
           status: varbinds[1]?.value || 0,
-          inkLevel: varbinds[2]?.value || null,
+          inkLevel: inkLevel,
         };
         
         resolve(info);
       });
     } catch (error) {
+      console.log(`  ⚠️  Erro SNMP para ${ip}:`, error.message);
       resolve({ available: false });
+    }
+  });
+}
+
+/**
+ * Tenta obter nível de tinta usando múltiplos OIDs alternativos
+ */
+async function tryAlternativeInkOIDs(ip, community = 'public') {
+  return new Promise((resolve) => {
+    try {
+      const session = new snmp.Session({ host: ip, community, timeout: 5000 });
+      
+      // Lista de OIDs alternativos para diferentes fabricantes
+      const alternativeOIDs = [
+        // Índices diferentes do mesmo OID base
+        [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 2], // Segundo cartucho
+        [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 3], // Terceiro cartucho
+        [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 4], // Quarto cartucho
+        // HP específico
+        [1, 3, 6, 1, 4, 1, 11, 2, 3, 9, 4, 2, 1, 4, 1, 1, 5, 1],
+        // Brother específico
+        [1, 3, 6, 1, 4, 1, 2435, 2, 3, 9, 4, 2, 1, 5, 5, 1, 0],
+      ];
+      
+      session.getAll({ oids: alternativeOIDs }, (error, varbinds) => {
+        session.close();
+        
+        if (error) {
+          resolve(null);
+          return;
+        }
+        
+        console.log(`  🔍 Tentando OIDs alternativos para ${ip}:`, 
+          varbinds.map((v, i) => `OID[${i}]: ${v?.value}`).join(', ')
+        );
+        
+        // Procurar o primeiro valor válido
+        for (const varbind of varbinds) {
+          const value = varbind?.value;
+          if (value !== null && value !== undefined && value >= 0) {
+            let inkLevel = null;
+            
+            if (value <= 100) {
+              inkLevel = value;
+            } else if (value <= 255) {
+              inkLevel = Math.round((value / 255) * 100);
+            }
+            
+            if (inkLevel !== null) {
+              console.log(`  ✅ Nível encontrado via OID alternativo: ${inkLevel}%`);
+              resolve(inkLevel);
+              return;
+            }
+          }
+        }
+        
+        resolve(null);
+      });
+    } catch (error) {
+      resolve(null);
     }
   });
 }
@@ -258,6 +352,16 @@ async function detectNetworkPrinters() {
           // Nível de tinta (se disponível)
           if (snmpInfo.inkLevel !== null && snmpInfo.inkLevel >= 0) {
             inkLevel = Math.min(100, snmpInfo.inkLevel);
+            console.log(`  🎨 Nível de tinta detectado: ${inkLevel}%`);
+          } else {
+            console.log(`  ⚠️  Nível de tinta não disponível via OID padrão, tentando OIDs alternativos...`);
+            // Tentar OIDs alternativos
+            const alternativeInkLevel = await tryAlternativeInkOIDs(ip, snmpCommunity || 'public');
+            if (alternativeInkLevel !== null) {
+              inkLevel = alternativeInkLevel;
+            } else {
+              console.log(`  ❌ Nenhum OID alternativo retornou nível de tinta`);
+            }
           }
         }
       }
@@ -274,7 +378,7 @@ async function detectNetworkPrinters() {
         registered_by: config.computerName,
       });
       
-      console.log(`  ${isOnline ? '✅' : '❌'} ${name} (${ip}) - ${status}`);
+      console.log(`  ${isOnline ? '✅' : '❌'} ${name} (${ip}) - ${status} - Tinta: ${inkLevel !== null ? inkLevel + '%' : 'N/A'}`);
     } catch (error) {
       console.error(`⚠️  Erro ao verificar ${networkPrinter.name}:`, error.message);
     }
