@@ -186,13 +186,24 @@ async function getSNMPInfo(ip, community = 'public') {
     try {
       const session = new snmp.Session({ host: ip, community, timeout: 5000 });
       
-      // OIDs padrão para impressoras
+      // OIDs padrão para impressoras - buscar múltiplos cartuchos
       const oids = {
         sysDescr: [1, 3, 6, 1, 2, 1, 1, 1, 0], // Descrição do sistema
         hrPrinterStatus: [1, 3, 6, 1, 2, 1, 25, 3, 5, 1, 1, 1], // Status da impressora
-        // OIDs para níveis de tinta/toner
-        prtMarkerSuppliesLevel: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 1], // Nível atual
-        prtMarkerSuppliesMaxCapacity: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 8, 1, 1], // Capacidade máxima
+        // OIDs para níveis de tinta/toner - índices 1 a 4 (CMYK)
+        level1: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 1],
+        max1: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 8, 1, 1],
+        level2: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 2],
+        max2: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 8, 1, 2],
+        level3: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 3],
+        max3: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 8, 1, 3],
+        level4: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 9, 1, 4],
+        max4: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 8, 1, 4],
+        // OIDs para nomes/cores dos cartuchos
+        color1: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 6, 1, 1],
+        color2: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 6, 1, 2],
+        color3: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 6, 1, 3],
+        color4: [1, 3, 6, 1, 2, 1, 43, 11, 1, 1, 6, 1, 4],
       };
       
       session.getAll({ oids: Object.values(oids) }, (error, varbinds) => {
@@ -207,39 +218,71 @@ async function getSNMPInfo(ip, community = 'public') {
         console.log(`  📊 SNMP Response para ${ip}:`, {
           description: varbinds[0]?.value?.toString() || 'N/A',
           status: varbinds[1]?.value,
-          currentLevel: varbinds[2]?.value,
-          maxCapacity: varbinds[3]?.value,
         });
         
-        // Calcular percentual de tinta
-        let inkLevel = null;
-        const currentLevel = varbinds[2]?.value;
-        const maxCapacity = varbinds[3]?.value;
+        // Processar níveis de tinta por cor
+        const inkLevels = [];
+        let totalInk = 0;
+        let validCartridges = 0;
         
-        if (currentLevel !== null && currentLevel !== undefined) {
-          if (maxCapacity && maxCapacity > 0) {
-            // Calcular percentual baseado na capacidade máxima
-            inkLevel = Math.round((currentLevel / maxCapacity) * 100);
-            console.log(`  🖋️  Tinta calculada: ${currentLevel}/${maxCapacity} = ${inkLevel}%`);
-          } else if (currentLevel >= 0 && currentLevel <= 100) {
-            // Valor já é percentual
-            inkLevel = currentLevel;
-            console.log(`  🖋️  Tinta (percentual direto): ${inkLevel}%`);
-          } else if (currentLevel > 100) {
-            // Valor pode ser em outra escala (ex: 0-255)
-            inkLevel = Math.round((currentLevel / 255) * 100);
-            console.log(`  🖋️  Tinta (escala 255): ${currentLevel} = ${inkLevel}%`);
-          }
+        for (let i = 0; i < 4; i++) {
+          const levelIdx = 2 + (i * 2);
+          const maxIdx = 3 + (i * 2);
+          const colorIdx = 10 + i;
           
-          // Garantir que está entre 0-100
-          inkLevel = Math.max(0, Math.min(100, inkLevel));
+          const currentLevel = varbinds[levelIdx]?.value;
+          const maxCapacity = varbinds[maxIdx]?.value;
+          const colorName = varbinds[colorIdx]?.value?.toString() || '';
+          
+          if (currentLevel !== null && currentLevel !== undefined && currentLevel >= 0) {
+            let percentage = null;
+            
+            if (maxCapacity && maxCapacity > 0) {
+              percentage = Math.round((currentLevel / maxCapacity) * 100);
+            } else if (currentLevel >= 0 && currentLevel <= 100) {
+              percentage = currentLevel;
+            } else if (currentLevel > 100) {
+              percentage = Math.round((currentLevel / 255) * 100);
+            }
+            
+            if (percentage !== null) {
+              percentage = Math.max(0, Math.min(100, percentage));
+              
+              // Detectar cor baseado no nome ou posição
+              let color = 'black';
+              const colorLower = colorName.toLowerCase();
+              if (colorLower.includes('cyan') || colorLower.includes('ciano')) color = 'cyan';
+              else if (colorLower.includes('magenta')) color = 'magenta';
+              else if (colorLower.includes('yellow') || colorLower.includes('amarelo')) color = 'yellow';
+              else if (colorLower.includes('black') || colorLower.includes('preto') || colorLower.includes('negro')) color = 'black';
+              else if (i === 0) color = 'cyan';
+              else if (i === 1) color = 'magenta';
+              else if (i === 2) color = 'yellow';
+              else if (i === 3) color = 'black';
+              
+              inkLevels.push({
+                color,
+                level: percentage,
+                name: colorName || color
+              });
+              
+              totalInk += percentage;
+              validCartridges++;
+              
+              console.log(`  🎨 Cartucho ${i + 1} (${color}): ${percentage}%`);
+            }
+          }
         }
+        
+        // Calcular média geral
+        const avgInkLevel = validCartridges > 0 ? Math.round(totalInk / validCartridges) : null;
         
         const info = {
           available: true,
           description: varbinds[0]?.value?.toString() || 'N/A',
           status: varbinds[1]?.value || 0,
-          inkLevel: inkLevel,
+          inkLevel: avgInkLevel,
+          inkLevels: inkLevels.length > 0 ? inkLevels : null,
         };
         
         resolve(info);
@@ -335,6 +378,7 @@ async function detectNetworkPrinters() {
       let status = isOnline ? 'Online' : 'Offline';
       
       // Se estiver online, tentar obter informações via SNMP
+      let inkLevels = null;
       if (isOnline) {
         const snmpInfo = await getSNMPInfo(ip, snmpCommunity || 'public');
         
@@ -349,10 +393,16 @@ async function detectNetworkPrinters() {
           };
           status = statusMap[snmpInfo.status] || 'Online';
           
-          // Nível de tinta (se disponível)
+          // Níveis de tinta por cor (se disponível)
+          if (snmpInfo.inkLevels && snmpInfo.inkLevels.length > 0) {
+            inkLevels = snmpInfo.inkLevels;
+            console.log(`  🎨 Níveis de tinta por cor detectados: ${inkLevels.length} cartuchos`);
+          }
+          
+          // Nível de tinta médio (se disponível)
           if (snmpInfo.inkLevel !== null && snmpInfo.inkLevel >= 0) {
             inkLevel = Math.min(100, snmpInfo.inkLevel);
-            console.log(`  🎨 Nível de tinta detectado: ${inkLevel}%`);
+            console.log(`  🎨 Nível médio de tinta: ${inkLevel}%`);
           } else {
             console.log(`  ⚠️  Nível de tinta não disponível via OID padrão, tentando OIDs alternativos...`);
             // Tentar OIDs alternativos
@@ -373,6 +423,7 @@ async function detectNetworkPrinters() {
         usb_port: null,
         status,
         ink_level: inkLevel,
+        ink_levels: inkLevels,
         last_check: new Date().toISOString(),
         location: config.location,
         registered_by: config.computerName,
@@ -418,6 +469,7 @@ async function updatePrinterInFirestore(printer) {
       await printerRef.update({
         status: printerData.status,
         ink_level: printerData.ink_level,
+        ink_levels: printerData.ink_levels || null,
         last_check: printerData.last_check,
         updated_at: printerData.updated_at,
         ip: printerData.ip,
