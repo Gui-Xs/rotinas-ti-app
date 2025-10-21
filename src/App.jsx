@@ -188,6 +188,11 @@ const createNotification = async (userId, userName, type, message, routineId = n
 
 const scheduleNextExecution = async (routine, lastExecution) => {
     try {
+        // Não agendar próxima execução para tarefas únicas
+        if (routine.frequencia === 'unica') {
+            return;
+        }
+        
         const nextDate = new Date();
         
         switch(routine.frequencia) {
@@ -222,6 +227,11 @@ const checkOverdueRoutines = async (routines, executions, users) => {
     today.setHours(0, 0, 0, 0);
     
     for (const routine of routines) {
+        // Não verificar atrasos em tarefas únicas
+        if (routine.frequencia === 'unica') {
+            continue;
+        }
+        
         const lastExecution = executions
             .filter(e => e.rotinaId === routine.id)
             .sort((a, b) => b.dataHora.toMillis() - a.dataHora.toMillis())[0];
@@ -775,6 +785,7 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
         const dailyRoutines = routines.filter(r => r.frequencia === 'diaria');
         const weeklyRoutines = routines.filter(r => r.frequencia === 'semanal');
         const monthlyRoutines = routines.filter(r => r.frequencia === 'mensal');
+        const uniqueRoutines = routines.filter(r => r.frequencia === 'unica');
         
         // Execuções por período
         const executionsToday = executions.filter(e => e.dataHora >= startOfToday);
@@ -827,8 +838,10 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
             totalToday: dailyRoutines.length,
             totalWeek: weeklyRoutines.length,
             totalMonth: monthlyRoutines.length,
+            totalUnique: uniqueRoutines.length,
             completedWeek: weeklyRoutines.filter(r => completedWeekIds.has(r.id)).length,
             completedMonth: monthlyRoutines.filter(r => completedMonthIds.has(r.id)).length,
+            completedUnique: uniqueRoutines.filter(r => executions.some(e => e.rotinaId === r.id)).length,
             categoriesData,
             categoryExecutions,
             avgCompletionTime,
@@ -898,7 +911,7 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
             </div>
 
             {/* Estatísticas Semanais e Mensais */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard 
                     title="Execuções Esta Semana" 
                     value={stats.executionsWeek} 
@@ -910,6 +923,12 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
                     value={stats.executionsMonth} 
                     icon={Activity} 
                     colorClass="bg-purple-500" 
+                />
+                <StatCard 
+                    title="Tarefas Únicas" 
+                    value={`${stats.completedUnique}/${stats.totalUnique}`} 
+                    icon={CheckCircle} 
+                    colorClass="bg-teal-500" 
                 />
                 <StatCard 
                     title="Tempo Médio (h)" 
@@ -1105,6 +1124,8 @@ const RoutinesPage = ({ routines, executions, userData }) => {
         const lastExecDate = lastExecution.dataHora.toDate();
 
         switch(routine.frequencia) {
+            case 'unica':
+                return { text: 'Concluída', color: 'text-green-600', isDone: true };
             case 'diaria':
                 if (lastExecDate >= today) {
                     return { text: 'Concluída Hoje', color: 'text-green-600', isDone: true };
@@ -2445,6 +2466,7 @@ const AdminPage = ({ routines, users }) => {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
                             <select name="frequencia" value={formState.frequencia} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="unica">Única</option>
                                 <option value="diaria">Diária</option>
                                 <option value="semanal">Semanal</option>
                                 <option value="mensal">Mensal</option>
