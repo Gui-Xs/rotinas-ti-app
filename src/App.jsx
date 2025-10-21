@@ -188,6 +188,11 @@ const createNotification = async (userId, userName, type, message, routineId = n
 
 const scheduleNextExecution = async (routine, lastExecution) => {
     try {
+        // Não agendar próxima execução para tarefas únicas
+        if (routine.frequencia === 'unica') {
+            return;
+        }
+        
         const nextDate = new Date();
         
         switch(routine.frequencia) {
@@ -222,6 +227,11 @@ const checkOverdueRoutines = async (routines, executions, users) => {
     today.setHours(0, 0, 0, 0);
     
     for (const routine of routines) {
+        // Não verificar atrasos em tarefas únicas
+        if (routine.frequencia === 'unica') {
+            continue;
+        }
+        
         const lastExecution = executions
             .filter(e => e.rotinaId === routine.id)
             .sort((a, b) => b.dataHora.toMillis() - a.dataHora.toMillis())[0];
@@ -775,6 +785,7 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
         const dailyRoutines = routines.filter(r => r.frequencia === 'diaria');
         const weeklyRoutines = routines.filter(r => r.frequencia === 'semanal');
         const monthlyRoutines = routines.filter(r => r.frequencia === 'mensal');
+        const uniqueRoutines = routines.filter(r => r.frequencia === 'unica');
         
         // Execuções por período
         const executionsToday = executions.filter(e => e.dataHora >= startOfToday);
@@ -827,8 +838,10 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
             totalToday: dailyRoutines.length,
             totalWeek: weeklyRoutines.length,
             totalMonth: monthlyRoutines.length,
+            totalUnique: uniqueRoutines.length,
             completedWeek: weeklyRoutines.filter(r => completedWeekIds.has(r.id)).length,
             completedMonth: monthlyRoutines.filter(r => completedMonthIds.has(r.id)).length,
+            completedUnique: uniqueRoutines.filter(r => executions.some(e => e.rotinaId === r.id)).length,
             categoriesData,
             categoryExecutions,
             avgCompletionTime,
@@ -898,7 +911,7 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
             </div>
 
             {/* Estatísticas Semanais e Mensais */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard 
                     title="Execuções Esta Semana" 
                     value={stats.executionsWeek} 
@@ -910,6 +923,12 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
                     value={stats.executionsMonth} 
                     icon={Activity} 
                     colorClass="bg-purple-500" 
+                />
+                <StatCard 
+                    title="Tarefas Únicas" 
+                    value={`${stats.completedUnique}/${stats.totalUnique}`} 
+                    icon={CheckCircle} 
+                    colorClass="bg-teal-500" 
                 />
                 <StatCard 
                     title="Tempo Médio (h)" 
@@ -1105,6 +1124,8 @@ const RoutinesPage = ({ routines, executions, userData }) => {
         const lastExecDate = lastExecution.dataHora.toDate();
 
         switch(routine.frequencia) {
+            case 'unica':
+                return { text: 'Concluída', color: 'text-green-600', isDone: true };
             case 'diaria':
                 if (lastExecDate >= today) {
                     return { text: 'Concluída Hoje', color: 'text-green-600', isDone: true };
@@ -1694,6 +1715,22 @@ const PrintersPage = () => {
         // O onSnapshot já mantém os dados atualizados automaticamente
     };
 
+    // Remover impressora
+    const handleDeletePrinter = async (printerId, printerName) => {
+        if (!window.confirm(`Tem certeza que deseja remover a impressora "${printerName}"?`)) {
+            return;
+        }
+        
+        try {
+            const printerRef = doc(db, `/artifacts/${appId}/printers`, printerId);
+            await deleteDoc(printerRef);
+            console.log(`Impressora ${printerName} removida com sucesso`);
+        } catch (error) {
+            console.error('Erro ao remover impressora:', error);
+            alert('Erro ao remover impressora. Verifique o console para mais detalhes.');
+        }
+    };
+
     // Filtrar impressoras
     const filteredPrinters = useMemo(() => {
         let filtered = printers;
@@ -1961,13 +1998,22 @@ const PrintersPage = () => {
                                             </div>
                                         </td>
                                         <td className="p-3">
-                                            <button 
-                                                onClick={() => setExpandedPrinter(expandedPrinter === printer.id ? null : printer.id)} 
-                                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                                                title="Ver detalhes"
-                                            >
-                                                <ChevronDown className={`w-5 h-5 transition-transform ${expandedPrinter === printer.id ? 'rotate-180' : ''}`}/>
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button 
+                                                    onClick={() => setExpandedPrinter(expandedPrinter === printer.id ? null : printer.id)} 
+                                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                    title="Ver detalhes"
+                                                >
+                                                    <ChevronDown className={`w-5 h-5 transition-transform ${expandedPrinter === printer.id ? 'rotate-180' : ''}`}/>
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeletePrinter(printer.id, printer.name)} 
+                                                    className="text-red-600 hover:text-red-800 transition-colors"
+                                                    title="Remover impressora"
+                                                >
+                                                    <Trash2 className="w-5 h-5"/>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                     {expandedPrinter === printer.id && (
@@ -2023,46 +2069,95 @@ const PrintersPage = () => {
                                                         </div>
                                                     </div>
                                                     
-                                                    {printer.ink_level !== null && printer.ink_level !== undefined && (
+                                                    {(printer.ink_level !== null && printer.ink_level !== undefined) || (printer.ink_levels && printer.ink_levels.length > 0) ? (
                                                         <div className="bg-white rounded-lg p-4 shadow-sm">
                                                             <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                                                 <Droplet className="w-4 h-4" />
                                                                 Nível de Tinta/Toner
                                                             </h4>
-                                                            <div className="flex items-center justify-center">
-                                                                <div className="relative w-32 h-32">
-                                                                    <svg viewBox="0 0 100 100" className="transform -rotate-90">
-                                                                        <circle
-                                                                            cx="50"
-                                                                            cy="50"
-                                                                            r="40"
-                                                                            fill="transparent"
-                                                                            stroke="#E5E7EB"
-                                                                            strokeWidth="8"
-                                                                        />
-                                                                        <circle
-                                                                            cx="50"
-                                                                            cy="50"
-                                                                            r="40"
-                                                                            fill="transparent"
-                                                                            stroke={printer.ink_level < 20 ? '#EF4444' : printer.ink_level < 50 ? '#F59E0B' : '#10B981'}
-                                                                            strokeWidth="8"
-                                                                            strokeDasharray={`${printer.ink_level * 2.51} 251`}
-                                                                            strokeLinecap="round"
-                                                                        />
-                                                                    </svg>
-                                                                    <div className="absolute inset-0 flex items-center justify-center">
-                                                                        <div className="text-center">
-                                                                            <div className="text-2xl font-bold text-gray-800">{printer.ink_level}%</div>
-                                                                            <div className="text-xs text-gray-500">
-                                                                                {printer.ink_level < 20 ? 'Crítico' : printer.ink_level < 50 ? 'Baixo' : 'OK'}
+                                                            
+                                                            {/* Níveis por cor (se disponível) */}
+                                                            {printer.ink_levels && printer.ink_levels.length > 0 ? (
+                                                                <div className="space-y-3">
+                                                                    {printer.ink_levels.map((ink, idx) => {
+                                                                        const colorMap = {
+                                                                            cyan: { bg: 'bg-cyan-500', text: 'Ciano', emoji: '🔵' },
+                                                                            magenta: { bg: 'bg-pink-500', text: 'Magenta', emoji: '🔴' },
+                                                                            yellow: { bg: 'bg-yellow-400', text: 'Amarelo', emoji: '🟡' },
+                                                                            black: { bg: 'bg-gray-800', text: 'Preto', emoji: '⚫' },
+                                                                        };
+                                                                        const colorInfo = colorMap[ink.color] || { bg: 'bg-gray-500', text: ink.color, emoji: '⚪' };
+                                                                        
+                                                                        return (
+                                                                            <div key={idx} className="flex items-center gap-3">
+                                                                                <span className="text-sm font-medium text-gray-700 w-20">
+                                                                                    {colorInfo.emoji} {colorInfo.text}
+                                                                                </span>
+                                                                                <div className="flex-1 bg-gray-200 rounded-full h-3">
+                                                                                    <div 
+                                                                                        className={`h-3 rounded-full transition-all ${colorInfo.bg}`}
+                                                                                        style={{ width: `${ink.level}%` }}
+                                                                                    />
+                                                                                </div>
+                                                                                <span className="text-sm font-semibold text-gray-700 w-12 text-right">
+                                                                                    {ink.level}%
+                                                                                </span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                    
+                                                                    {/* Média geral */}
+                                                                    {printer.ink_level !== null && printer.ink_level !== undefined && (
+                                                                        <div className="mt-4 pt-3 border-t border-gray-200">
+                                                                            <div className="flex items-center justify-between">
+                                                                                <span className="text-sm font-semibold text-gray-700">Média Geral:</span>
+                                                                                <span className={`text-lg font-bold ${
+                                                                                    printer.ink_level < 20 ? 'text-red-600' : 
+                                                                                    printer.ink_level < 50 ? 'text-yellow-600' : 'text-green-600'
+                                                                                }`}>
+                                                                                    {printer.ink_level}%
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                /* Exibição circular para nível único */
+                                                                <div className="flex items-center justify-center">
+                                                                    <div className="relative w-32 h-32">
+                                                                        <svg viewBox="0 0 100 100" className="transform -rotate-90">
+                                                                            <circle
+                                                                                cx="50"
+                                                                                cy="50"
+                                                                                r="40"
+                                                                                fill="transparent"
+                                                                                stroke="#E5E7EB"
+                                                                                strokeWidth="8"
+                                                                            />
+                                                                            <circle
+                                                                                cx="50"
+                                                                                cy="50"
+                                                                                r="40"
+                                                                                fill="transparent"
+                                                                                stroke={printer.ink_level < 20 ? '#EF4444' : printer.ink_level < 50 ? '#F59E0B' : '#10B981'}
+                                                                                strokeWidth="8"
+                                                                                strokeDasharray={`${printer.ink_level * 2.51} 251`}
+                                                                                strokeLinecap="round"
+                                                                            />
+                                                                        </svg>
+                                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                                            <div className="text-center">
+                                                                                <div className="text-2xl font-bold text-gray-800">{printer.ink_level}%</div>
+                                                                                <div className="text-xs text-gray-500">
+                                                                                    {printer.ink_level < 20 ? 'Crítico' : printer.ink_level < 50 ? 'Baixo' : 'OK'}
+                                                                                </div>
                                                                             </div>
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
+                                                            )}
                                                         </div>
-                                                    )}
+                                                    ) : null}
                                                 </div>
                                             </td>
                                         </tr>
@@ -2371,6 +2466,7 @@ const AdminPage = ({ routines, users }) => {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
                             <select name="frequencia" value={formState.frequencia} onChange={handleFormChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="unica">Única</option>
                                 <option value="diaria">Diária</option>
                                 <option value="semanal">Semanal</option>
                                 <option value="mensal">Mensal</option>
