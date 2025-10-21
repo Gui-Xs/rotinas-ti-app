@@ -723,43 +723,119 @@ const LoginPage = ({ setPage }) => {
 };
 
 // --- Componentes do Dashboard ---
-const StatCard = ({ title, value, icon: Icon, colorClass }) => (
-    <Card className="flex items-center gap-4">
-        <div className={`p-3 rounded-full ${colorClass}`}>
-            <Icon className="w-6 h-6 text-white" />
-        </div>
-        <div>
-            <p className="text-sm text-gray-500">{title}</p>
-            <p className="text-2xl font-bold text-gray-800">{value}</p>
-        </div>
-    </Card>
-);
+const StatCard = ({ title, value, icon: Icon, colorClass, trend }) => {
+    const [isVisible, setIsVisible] = React.useState(false);
+    
+    React.useEffect(() => {
+        const timer = setTimeout(() => setIsVisible(true), 100);
+        return () => clearTimeout(timer);
+    }, []);
+    
+    return (
+        <Card className={`relative overflow-hidden transition-all duration-500 hover:shadow-2xl hover:-translate-y-1 group ${
+            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+        }`}>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-white/10 to-transparent rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700"></div>
+            <div className="flex items-center gap-4 relative z-10">
+                <div className={`p-4 rounded-2xl ${colorClass} shadow-lg transform group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
+                    <Icon className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex-1">
+                    <p className="text-sm text-gray-500 font-medium">{title}</p>
+                    <div className="flex items-baseline gap-2">
+                        <p className="text-3xl font-bold text-gray-800 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text">{value}</p>
+                        {trend && (
+                            <span className={`text-xs font-semibold ${
+                                trend > 0 ? 'text-green-500' : trend < 0 ? 'text-red-500' : 'text-gray-400'
+                            }`}>
+                                {trend > 0 ? '↑' : trend < 0 ? '↓' : '−'} {Math.abs(trend)}%
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+            <div className={`absolute bottom-0 left-0 h-1 bg-gradient-to-r ${colorClass} transition-all duration-700 ${
+                isVisible ? 'w-full' : 'w-0'
+            }`}></div>
+        </Card>
+    );
+};
 
 const ProgressCircle = ({ percentage }) => {
+    const [animatedPercentage, setAnimatedPercentage] = React.useState(0);
     const radius = 50;
     const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (percentage / 100) * circumference;
+    const offset = circumference - (animatedPercentage / 100) * circumference;
+
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            const interval = setInterval(() => {
+                setAnimatedPercentage(prev => {
+                    if (prev >= percentage) {
+                        clearInterval(interval);
+                        return percentage;
+                    }
+                    return prev + 2;
+                });
+            }, 20);
+            return () => clearInterval(interval);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [percentage]);
+
+    const getColor = () => {
+        if (percentage >= 80) return 'from-green-400 to-emerald-600';
+        if (percentage >= 50) return 'from-blue-400 to-blue-600';
+        if (percentage >= 30) return 'from-yellow-400 to-orange-500';
+        return 'from-red-400 to-red-600';
+    };
 
     return (
-        <div className="flex flex-col items-center justify-center gap-2">
-            <div className="relative w-32 h-32">
-                <svg className="w-full h-full transform -rotate-90">
-                    <circle className="text-gray-200" strokeWidth="10" stroke="currentColor" fill="transparent" r={radius} cx="64" cy="64" />
+        <div className="flex flex-col items-center justify-center gap-3 group">
+            <div className="relative w-40 h-40 transform transition-transform duration-500 group-hover:scale-110">
+                <svg className="w-full h-full transform -rotate-90 drop-shadow-lg">
+                    <defs>
+                        <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" className="text-blue-400" stopColor="currentColor" />
+                            <stop offset="100%" className="text-blue-600" stopColor="currentColor" />
+                        </linearGradient>
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <circle 
+                        className="text-gray-200" 
+                        strokeWidth="8" 
+                        stroke="currentColor" 
+                        fill="transparent" 
+                        r={radius} 
+                        cx="80" 
+                        cy="80" 
+                    />
                     <circle
-                        className="text-blue-600"
-                        strokeWidth="10"
+                        className={`bg-gradient-to-r ${getColor()}`}
+                        strokeWidth="8"
                         strokeDasharray={circumference}
                         strokeDashoffset={offset}
                         strokeLinecap="round"
-                        stroke="currentColor"
+                        stroke="url(#progressGradient)"
                         fill="transparent"
                         r={radius}
-                        cx="64"
-                        cy="64"
+                        cx="80"
+                        cy="80"
+                        filter="url(#glow)"
+                        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
                     />
                 </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-blue-700">{`${Math.round(percentage)}%`}</span>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                        {`${Math.round(animatedPercentage)}%`}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">completo</span>
                 </div>
             </div>
             <p className="text-sm text-gray-600 font-semibold">Concluído Hoje</p>
@@ -865,28 +941,36 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
     }));
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-800">Dashboard</h2>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+        <div className="space-y-6 animate-fadeIn">
+            <div className="flex justify-between items-center bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-2xl shadow-sm">
+                <div>
+                    <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Dashboard</h2>
+                    <p className="text-sm text-gray-500 mt-1">Bem-vindo de volta! Aqui está o resumo das suas atividades</p>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm">
+                    <Calendar className="w-5 h-5 text-blue-600" />
+                    <span className="text-sm font-medium text-gray-700">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
                 </div>
             </div>
 
             {/* Alertas de Rotinas Atrasadas */}
             {stats.overdueRoutines.length > 0 && (
-                <Card className="bg-red-50 border-l-4 border-red-500">
+                <Card className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 shadow-lg animate-pulse-slow">
                     <div className="flex items-start gap-3">
-                        <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
-                        <div>
-                            <h3 className="font-bold text-red-800">Atenção! Rotinas Críticas Pendentes</h3>
+                        <div className="p-2 bg-red-100 rounded-full">
+                            <AlertTriangle className="w-6 h-6 text-red-600 animate-bounce" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="font-bold text-red-800 text-lg">Atenção! Rotinas Críticas Pendentes</h3>
                             <p className="text-sm text-red-700 mt-1">
                                 Você tem {stats.overdueRoutines.length} rotina(s) de alta prioridade pendente(s) hoje.
                             </p>
-                            <div className="mt-2 space-y-1">
+                            <div className="mt-3 space-y-2">
                                 {stats.overdueRoutines.map(r => (
-                                    <div key={r.id} className="text-sm text-red-600">• {r.nome}</div>
+                                    <div key={r.id} className="flex items-center gap-2 text-sm text-red-600 bg-white/50 px-3 py-2 rounded-lg">
+                                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                                        <span className="font-medium">{r.nome}</span>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -896,18 +980,18 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
 
             {/* Cards de Estatísticas */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="md:col-span-2 lg:col-span-2 flex flex-col sm:flex-row items-center justify-around">
+                <Card className="md:col-span-2 lg:col-span-2 flex flex-col sm:flex-row items-center justify-around bg-gradient-to-br from-blue-50 via-white to-purple-50 hover:shadow-2xl transition-all duration-500">
                     <ProgressCircle percentage={completionPercentage} />
                     <div className="text-center sm:text-left mt-4 sm:mt-0">
-                        <h3 className="text-lg font-semibold text-gray-800">Resumo do Dia</h3>
-                        <p className="text-gray-600">{`Você concluiu ${stats.completedToday.length} de ${stats.totalToday} rotinas diárias.`}</p>
-                        <Button onClick={() => setPage('rotinas')} className="mt-4">
+                        <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Resumo do Dia</h3>
+                        <p className="text-gray-600 mt-2">{`Você concluiu ${stats.completedToday.length} de ${stats.totalToday} rotinas diárias.`}</p>
+                        <Button onClick={() => setPage('rotinas')} className="mt-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300">
                             Ver Rotinas
                         </Button>
                     </div>
                 </Card>
-                <StatCard title="Pendentes Hoje" value={stats.pendingToday.length} icon={Clock} colorClass="bg-yellow-500" />
-                <StatCard title="Concluídas Hoje" value={stats.completedToday.length} icon={CheckCircle} colorClass="bg-green-500" />
+                <StatCard title="Pendentes Hoje" value={stats.pendingToday.length} icon={Clock} colorClass="bg-gradient-to-br from-yellow-400 to-orange-500" />
+                <StatCard title="Concluídas Hoje" value={stats.completedToday.length} icon={CheckCircle} colorClass="bg-gradient-to-br from-green-400 to-emerald-500" />
             </div>
 
             {/* Estatísticas Semanais e Mensais */}
@@ -916,77 +1000,101 @@ const DashboardPage = ({ routines, executions, setPage, users }) => {
                     title="Execuções Esta Semana" 
                     value={stats.executionsWeek} 
                     icon={TrendingUp} 
-                    colorClass="bg-blue-500" 
+                    colorClass="bg-gradient-to-br from-blue-500 to-blue-600" 
                 />
                 <StatCard 
                     title="Execuções Este Mês" 
                     value={stats.executionsMonth} 
                     icon={Activity} 
-                    colorClass="bg-purple-500" 
+                    colorClass="bg-gradient-to-br from-purple-500 to-pink-500" 
                 />
                 <StatCard 
                     title="Tarefas Únicas" 
                     value={`${stats.completedUnique}/${stats.totalUnique}`} 
                     icon={CheckCircle} 
-                    colorClass="bg-teal-500" 
+                    colorClass="bg-gradient-to-br from-teal-500 to-cyan-500" 
                 />
                 <StatCard 
                     title="Tempo Médio (h)" 
                     value={stats.avgCompletionTime} 
                     icon={Clock} 
-                    colorClass="bg-indigo-500" 
+                    colorClass="bg-gradient-to-br from-indigo-500 to-purple-600" 
                 />
             </div>
 
             {/* Gráficos */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
+                <Card className="hover:shadow-2xl transition-all duration-500 bg-gradient-to-br from-white to-blue-50">
+                    <div className="mb-4">
+                        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full"></div>
+                            Rotinas por Categoria
+                        </h3>
+                    </div>
                     <SimplePieChart 
                         data={categoryChartData} 
-                        title="Rotinas por Categoria"
+                        title=""
                     />
                 </Card>
-                <Card>
+                <Card className="hover:shadow-2xl transition-all duration-500 bg-gradient-to-br from-white to-purple-50">
+                    <div className="mb-4">
+                        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <div className="w-1 h-6 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full"></div>
+                            Execuções por Categoria (Esta Semana)
+                        </h3>
+                    </div>
                     <SimpleBarChart 
                         data={weeklyExecutionsData.length > 0 ? weeklyExecutionsData : [{label: 'Nenhuma execução', value: 0}]} 
-                        title="Execuções por Categoria (Esta Semana)"
+                        title=""
                     />
                 </Card>
             </div>
 
             {/* Rotinas Pendentes */}
             <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Rotinas Pendentes para Hoje</h3>
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="w-1 h-8 bg-gradient-to-b from-yellow-400 to-orange-500 rounded-full"></div>
+                    <h3 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">Rotinas Pendentes para Hoje</h3>
+                </div>
                 {stats.pendingToday.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                       {stats.pendingToday.map(routine => (
-                           <Card key={routine.id} className="hover:shadow-lg transition-shadow">
-                               <div className="flex justify-between items-start mb-2">
+                       {stats.pendingToday.map((routine, index) => (
+                           <Card key={routine.id} className="hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 bg-gradient-to-br from-white to-gray-50 border-l-4 border-yellow-400 group" style={{ animationDelay: `${index * 100}ms` }}>
+                               <div className="flex justify-between items-start mb-3">
                                    <div className="flex-1">
-                                       <div className="flex items-center gap-2 mb-1">
-                                           <p className="font-semibold">{routine.nome}</p>
+                                       <div className="flex items-center gap-2 mb-2">
+                                           <p className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">{routine.nome}</p>
                                            {routine.prioridade === 'alta' && (
-                                               <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">Alta</span>
+                                               <span className="px-2 py-1 bg-gradient-to-r from-red-500 to-orange-500 text-white text-xs rounded-full font-semibold shadow-sm">Alta</span>
                                            )}
                                        </div>
-                                       <p className="text-sm text-gray-500">{routine.categoria}</p>
+                                       <div className="flex items-center gap-2 text-sm text-gray-500">
+                                           <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                                           <p>{routine.categoria}</p>
+                                       </div>
                                        {routine.responsavel && (
-                                           <p className="text-xs text-gray-400 mt-1">Resp: {routine.responsavel}</p>
+                                           <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                                               <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
+                                               Resp: {routine.responsavel}
+                                           </p>
                                        )}
                                    </div>
                                </div>
                                <button 
                                    onClick={() => setPage('rotinas')} 
-                                   className="w-full mt-2 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-semibold transition-colors"
+                                   className="w-full mt-3 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 rounded-xl text-sm font-semibold transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
                                >
-                                   Executar Agora
+                                   Executar Agora →
                                </button>
                            </Card>
                        ))}
                     </div>
                 ) : (
-                    <Card>
-                        <p className="text-center text-gray-600">🎉 Todas as rotinas diárias foram concluídas!</p>
+                    <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-500">
+                        <div className="flex items-center justify-center gap-3 py-4">
+                            <span className="text-4xl">🎉</span>
+                            <p className="text-lg font-semibold text-gray-700">Todas as rotinas diárias foram concluídas!</p>
+                        </div>
                     </Card>
                 )}
             </div>
