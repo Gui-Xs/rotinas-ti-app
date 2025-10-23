@@ -1115,8 +1115,35 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [checklistProgress, setChecklistProgress] = useState({});
-    const [ongoingTasks, setOngoingTasks] = useState({});
+    const [ongoingTasks, setOngoingTasks] = useState(() => {
+        // Carregar tarefas em andamento do localStorage
+        try {
+            const saved = localStorage.getItem('ongoingTasks');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Converter strings de data de volta para objetos Date
+                Object.keys(parsed).forEach(key => {
+                    if (parsed[key].startTime) {
+                        parsed[key].startTime = new Date(parsed[key].startTime);
+                    }
+                });
+                return parsed;
+            }
+        } catch (error) {
+            console.error('Erro ao carregar tarefas em andamento:', error);
+        }
+        return {};
+    });
     const [currentTime, setCurrentTime] = useState(new Date());
+
+    // Salvar tarefas em andamento no localStorage sempre que mudar
+    useEffect(() => {
+        try {
+            localStorage.setItem('ongoingTasks', JSON.stringify(ongoingTasks));
+        } catch (error) {
+            console.error('Erro ao salvar tarefas em andamento:', error);
+        }
+    }, [ongoingTasks]);
 
     // Atualizar tempo a cada segundo quando houver tarefas em andamento
     useEffect(() => {
