@@ -88,7 +88,9 @@ import {
     PackageSearch,
     TrendingDown as StockDown,
     Archive,
-    Boxes
+    Boxes,
+    Play,
+    StopCircle
 } from 'lucide-react';
 import { firebaseConfig as importedConfig, appId as importedAppId } from './firebase.config';
 
@@ -1113,6 +1115,7 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [checklistProgress, setChecklistProgress] = useState({});
+    const [ongoingTasks, setOngoingTasks] = useState({});
 
     const handleFileChange = (e) => {
         if (e.target.files[0]) {
@@ -1121,6 +1124,14 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     };
 
     const closeAndResetModal = () => {
+        if (executingRoutine) {
+            // Remover da lista de tarefas em andamento
+            setOngoingTasks(prev => {
+                const updated = { ...prev };
+                delete updated[executingRoutine.id];
+                return updated;
+            });
+        }
         setExecutingRoutine(null);
         setObservacao('');
         setFoto(null);
@@ -1134,6 +1145,17 @@ const RoutinesPage = ({ routines, executions, userData }) => {
             ...prev,
             [index]: !prev[index]
         }));
+    };
+
+    const handleStartTask = (routine) => {
+        setOngoingTasks(prev => ({
+            ...prev,
+            [routine.id]: {
+                startTime: new Date(),
+                routine: routine
+            }
+        }));
+        setExecutingRoutine(routine);
     };
 
     const handleSubmitExecution = async () => {
@@ -1220,6 +1242,11 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     };
 
     const getRoutineStatus = useCallback((routine) => {
+        // Verificar se a tarefa está em andamento
+        if (ongoingTasks[routine.id]) {
+            return { text: 'Em Andamento', color: 'text-blue-600', isDone: false, isOngoing: true };
+        }
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
@@ -1227,16 +1254,16 @@ const RoutinesPage = ({ routines, executions, userData }) => {
             .filter(e => e.rotinaId === routine.id)
             .sort((a, b) => b.dataHora.toMillis() - a.dataHora.toMillis())[0];
 
-        if (!lastExecution) return { text: 'Pendente', color: 'text-yellow-600', isDone: false };
+        if (!lastExecution) return { text: 'Pendente', color: 'text-yellow-600', isDone: false, isOngoing: false };
 
         const lastExecDate = lastExecution.dataHora.toDate();
 
         switch(routine.frequencia) {
             case 'unica':
-                return { text: 'Concluída', color: 'text-green-600', isDone: true };
+                return { text: 'Concluída', color: 'text-green-600', isDone: true, isOngoing: false };
             case 'diaria':
                 if (lastExecDate >= today) {
-                    return { text: 'Concluída Hoje', color: 'text-green-600', isDone: true };
+                    return { text: 'Concluída Hoje', color: 'text-green-600', isDone: true, isOngoing: false };
                 }
                 break;
             case 'semanal':
@@ -1244,22 +1271,22 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                 startOfWeek.setDate(today.getDate() - today.getDay());
                 startOfWeek.setHours(0,0,0,0);
                 if (lastExecDate >= startOfWeek) {
-                     return { text: 'Concluída na Semana', color: 'text-green-600', isDone: true };
+                     return { text: 'Concluída na Semana', color: 'text-green-600', isDone: true, isOngoing: false };
                 }
                 break;
             case 'mensal':
                  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
                  if (lastExecDate >= startOfMonth) {
-                     return { text: 'Concluída no Mês', color: 'text-green-600', isDone: true };
+                     return { text: 'Concluída no Mês', color: 'text-green-600', isDone: true, isOngoing: false };
                  }
                 break;
             default:
                 break;
         }
 
-        return { text: 'Pendente', color: 'text-yellow-600', isDone: false };
+        return { text: 'Pendente', color: 'text-yellow-600', isDone: false, isOngoing: false };
 
-    }, [executions]);
+    }, [executions, ongoingTasks]);
 
     const filteredRoutines = useMemo(() => {
         let filtered = routines;
@@ -1291,7 +1318,8 @@ const RoutinesPage = ({ routines, executions, userData }) => {
             filtered = filtered.filter(r => {
                 const status = getRoutineStatus(r);
                 if (statusFilter === 'Concluída') return status.isDone;
-                if (statusFilter === 'Pendente') return !status.isDone;
+                if (statusFilter === 'Em Andamento') return status.isOngoing;
+                if (statusFilter === 'Pendente') return !status.isDone && !status.isOngoing;
                 return true;
             });
         }
@@ -1357,6 +1385,7 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                     <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="Todas">Todos Status</option>
                         <option value="Concluída">✅ Concluída</option>
+                        <option value="Em Andamento">🔵 Em Andamento</option>
                         <option value="Pendente">⏳ Pendente</option>
                     </select>
                     
@@ -1395,20 +1424,39 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                                     <span className={`font-semibold ${status.color}`}>{status.text}</span>
                                 </div>
                             </div>
-                            <Button 
-                                onClick={() => setExecutingRoutine(routine)} 
-                                disabled={status.isDone}
-                                className="w-full sm:w-auto"
-                            >
-                                {status.isDone ? <CheckCircle className="w-5 h-5"/> : <ClipboardList className="w-5 h-5"/>}
-                                {status.isDone ? 'Concluída' : 'Marcar como Concluída'}
-                            </Button>
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                {status.isDone ? (
+                                    <Button 
+                                        disabled
+                                        className="w-full sm:w-auto bg-green-500"
+                                    >
+                                        <CheckCircle className="w-5 h-5"/>
+                                        Concluída
+                                    </Button>
+                                ) : status.isOngoing ? (
+                                    <Button 
+                                        onClick={() => setExecutingRoutine(routine)} 
+                                        className="w-full sm:w-auto bg-red-500 hover:bg-red-600"
+                                    >
+                                        <StopCircle className="w-5 h-5"/>
+                                        Finalizar Tarefa
+                                    </Button>
+                                ) : (
+                                    <Button 
+                                        onClick={() => handleStartTask(routine)} 
+                                        className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600"
+                                    >
+                                        <Play className="w-5 h-5"/>
+                                        Iniciar Tarefa
+                                    </Button>
+                                )}
+                            </div>
                         </Card>
                     );
                 })}
             </div>
 
-            <Modal isOpen={!!executingRoutine} onClose={closeAndResetModal} title={`Executar: ${executingRoutine?.nome}`} size="lg">
+            <Modal isOpen={!!executingRoutine} onClose={closeAndResetModal} title={`Finalizar: ${executingRoutine?.nome}`} size="lg">
                  <div className="space-y-4">
                      {/* Checklist Interativo */}
                      {executingRoutine?.checklist && executingRoutine.checklist.length > 0 && (
@@ -1496,10 +1544,11 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                      )}
                      <div className="flex justify-end gap-2 pt-4">
                          <Button variant="secondary" onClick={closeAndResetModal} disabled={isSubmitting}>Cancelar</Button>
-                         <Button onClick={handleSubmitExecution} disabled={isSubmitting}>
-                             {isSubmitting ? 'Salvando...' : 'Salvar Execução'}
-                         </Button>
-                     </div>
+                         <Button onClick={handleSubmitExecution} disabled={isSubmitting} className="bg-red-500 hover:bg-red-600">
+                            <StopCircle className="w-5 h-5"/>
+                            {isSubmitting ? 'Finalizando...' : 'Finalizar Tarefa'}
+                        </Button>
+                    </div>
                  </div>
             </Modal>
         </div>
