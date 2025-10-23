@@ -1116,6 +1116,19 @@ const RoutinesPage = ({ routines, executions, userData }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [checklistProgress, setChecklistProgress] = useState({});
     const [ongoingTasks, setOngoingTasks] = useState({});
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    // Atualizar tempo a cada segundo quando houver tarefas em andamento
+    useEffect(() => {
+        const hasOngoingTasks = Object.keys(ongoingTasks).length > 0;
+        if (!hasOngoingTasks) return;
+
+        const interval = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [ongoingTasks]);
 
     const handleFileChange = (e) => {
         if (e.target.files[0]) {
@@ -1155,7 +1168,7 @@ const RoutinesPage = ({ routines, executions, userData }) => {
                 routine: routine
             }
         }));
-        setExecutingRoutine(routine);
+        // Não abre o modal automaticamente - apenas marca como em andamento
     };
 
     const handleSubmitExecution = async () => {
@@ -1172,6 +1185,15 @@ const RoutinesPage = ({ routines, executions, userData }) => {
         
         setIsSubmitting(true);
 
+        // Calcular tempo gasto na tarefa (se foi iniciada)
+        let tempoGastoMinutos = null;
+        const taskInfo = ongoingTasks[executingRoutine.id];
+        if (taskInfo && taskInfo.startTime) {
+            const endTime = new Date();
+            const diffMs = endTime - taskInfo.startTime;
+            tempoGastoMinutos = Math.round(diffMs / 60000); // Converter para minutos
+        }
+
         const executionData = {
             rotinaId: executingRoutine.id,
             dataHora: Timestamp.now(),
@@ -1179,7 +1201,8 @@ const RoutinesPage = ({ routines, executions, userData }) => {
             responsavelNome: userData.nome,
             observacao: observacao,
             fotoUrl: '',
-            checklistCompleted: executingRoutine.checklist || []
+            checklistCompleted: executingRoutine.checklist || [],
+            tempoGastoMinutos: tempoGastoMinutos
         };
 
         if (foto) {
@@ -1458,6 +1481,27 @@ const RoutinesPage = ({ routines, executions, userData }) => {
 
             <Modal isOpen={!!executingRoutine} onClose={closeAndResetModal} title={`Finalizar: ${executingRoutine?.nome}`} size="lg">
                  <div className="space-y-4">
+                     {/* Tempo Decorrido */}
+                     {executingRoutine && ongoingTasks[executingRoutine.id] && (
+                         <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
+                             <div className="flex items-center gap-2">
+                                 <Clock className="w-5 h-5 text-blue-600" />
+                                 <div>
+                                     <p className="text-sm font-medium text-gray-700">Tempo decorrido</p>
+                                     <p className="text-lg font-bold text-blue-600">
+                                         {(() => {
+                                             const startTime = ongoingTasks[executingRoutine.id].startTime;
+                                             const diffMs = currentTime - startTime;
+                                             const minutes = Math.floor(diffMs / 60000);
+                                             const seconds = Math.floor((diffMs % 60000) / 1000);
+                                             return `${minutes}min ${seconds}s`;
+                                         })()}
+                                     </p>
+                                 </div>
+                             </div>
+                         </div>
+                     )}
+
                      {/* Checklist Interativo */}
                      {executingRoutine?.checklist && executingRoutine.checklist.length > 0 && (
                          <div>
