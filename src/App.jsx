@@ -4483,20 +4483,27 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
         yellow: 100,
         black: 100
     });
+    const [separateApp, setSeparateApp] = useState(null);
+    const [separateDb, setSeparateDb] = useState(null);
 
     useEffect(() => {
         const loadPrinter = async () => {
             try {
                 console.log('Carregando impressora:', printerId);
                 
-                // Garantir que está autenticado
-                const currentUser = auth.currentUser;
-                if (!currentUser) {
-                    console.log('Fazendo login anônimo...');
-                    await signInAnonymously(auth);
-                }
+                // Criar uma instância separada do Firebase app para não interferir na sessão principal
+                const tempApp = initializeApp(firebaseConfig, 'updatePrinterApp-' + Date.now());
+                const tempAuth = getAuth(tempApp);
+                const tempDb = getFirestore(tempApp);
                 
-                const printerRef = doc(db, `/artifacts/${appId}/printers`, printerId);
+                setSeparateApp(tempApp);
+                setSeparateDb(tempDb);
+                
+                // Fazer login anônimo na instância separada
+                console.log('Fazendo login anônimo em instância separada...');
+                await signInAnonymously(tempAuth);
+                
+                const printerRef = doc(tempDb, `/artifacts/${appId}/printers`, printerId);
                 console.log('Buscando documento...');
                 const printerDoc = await getDoc(printerRef);
                 
@@ -4529,11 +4536,17 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
     }, [printerId]);
 
     const handleSave = async () => {
+        if (!separateDb) {
+            alert('Erro: Banco de dados não inicializado');
+            return;
+        }
+        
         setSaving(true);
         try {
             const avgInkLevel = Math.round((inkLevels.cyan + inkLevels.magenta + inkLevels.yellow + inkLevels.black) / 4);
             
-            const printerRef = doc(db, `/artifacts/${appId}/printers`, printerId);
+            // Usar o banco de dados separado
+            const printerRef = doc(separateDb, `/artifacts/${appId}/printers`, printerId);
             await updateDoc(printerRef, {
                 ink_level: avgInkLevel,
                 ink_levels: [
