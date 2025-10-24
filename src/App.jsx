@@ -1921,6 +1921,8 @@ const PrintersPage = () => {
 
     // Verificar se impressora está offline (última verificação > 5 minutos)
     const isOffline = (printer) => {
+        // Impressoras manuais nunca ficam offline automaticamente
+        if (printer.manual) return false;
         if (!printer.last_check) return true;
         const lastCheck = printer.last_check.toDate ? printer.last_check.toDate() : new Date(printer.last_check);
         const now = new Date();
@@ -1981,12 +1983,26 @@ const PrintersPage = () => {
         }
 
         try {
+            // Calcular média dos níveis de tinta
+            const avgInkLevel = Math.round((newPrinter.cyan + newPrinter.magenta + newPrinter.yellow + newPrinter.black) / 4);
+            
             const printerData = {
-                ...newPrinter,
+                name: newPrinter.name,
+                location: newPrinter.location,
+                type: newPrinter.type,
+                ip_address: newPrinter.ip_address,
                 status: 'Online',
+                manual: true,
                 last_check: Timestamp.now(),
                 registered_at: Timestamp.now(),
-                registered_by: 'Manual'
+                registered_by: 'Manual',
+                ink_level: avgInkLevel,
+                ink_levels: [
+                    { color: 'cyan', level: newPrinter.cyan },
+                    { color: 'magenta', level: newPrinter.magenta },
+                    { color: 'yellow', level: newPrinter.yellow },
+                    { color: 'black', level: newPrinter.black }
+                ]
             };
 
             const docRef = await addDoc(collection(db, `/artifacts/${appId}/printers`), printerData);
@@ -2312,6 +2328,19 @@ const PrintersPage = () => {
                                                 >
                                                     <ChevronDown className={`w-5 h-5 transition-transform ${expandedPrinter === printer.id ? 'rotate-180' : ''}`}/>
                                                 </button>
+                                                {printer.manual && (
+                                                    <button 
+                                                        onClick={() => setShowQRCode({
+                                                            id: printer.id,
+                                                            name: printer.name,
+                                                            url: `${window.location.origin}/update-printer/${printer.id}`
+                                                        })} 
+                                                        className="text-green-600 hover:text-green-800 transition-colors"
+                                                        title="Ver QR Code"
+                                                    >
+                                                        <Eye className="w-5 h-5"/>
+                                                    </button>
+                                                )}
                                                 <button 
                                                     onClick={() => handleDeletePrinter(printer.id, printer.name)} 
                                                     className="text-red-600 hover:text-red-800 transition-colors"
