@@ -4476,6 +4476,7 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
     const [printer, setPrinter] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState(null);
     const [inkLevels, setInkLevels] = useState({
         cyan: 100,
         magenta: 100,
@@ -4486,11 +4487,22 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
     useEffect(() => {
         const loadPrinter = async () => {
             try {
+                console.log('Carregando impressora:', printerId);
+                
+                // Garantir que está autenticado
+                const currentUser = auth.currentUser;
+                if (!currentUser) {
+                    console.log('Fazendo login anônimo...');
+                    await signInAnonymously(auth);
+                }
+                
                 const printerRef = doc(db, `/artifacts/${appId}/printers`, printerId);
+                console.log('Buscando documento...');
                 const printerDoc = await getDoc(printerRef);
                 
                 if (printerDoc.exists()) {
                     const data = printerDoc.data();
+                    console.log('Impressora encontrada:', data);
                     setPrinter({ id: printerDoc.id, ...data });
                     
                     // Carregar níveis atuais
@@ -4501,10 +4513,14 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
                         });
                         setInkLevels(levels);
                     }
+                } else {
+                    console.log('Impressora não encontrada');
+                    setError('Impressora não encontrada');
                 }
                 setLoading(false);
             } catch (error) {
                 console.error('Erro ao carregar impressora:', error);
+                setError(error.message);
                 setLoading(false);
             }
         };
@@ -4549,14 +4565,21 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
         );
     }
 
-    if (!printer) {
+    if (!printer && !loading) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <Card className="max-w-md">
                     <div className="text-center py-8">
                         <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-500" />
                         <h2 className="text-xl font-bold text-gray-800 mb-2">Impressora não encontrada</h2>
-                        <p className="text-gray-600">O QR Code pode estar inválido ou a impressora foi removida.</p>
+                        <p className="text-gray-600 mb-4">
+                            {error || 'O QR Code pode estar inválido ou a impressora foi removida.'}
+                        </p>
+                        {onClose && (
+                            <Button onClick={onClose} variant="secondary">
+                                Voltar
+                            </Button>
+                        )}
                     </div>
                 </Card>
             </div>
@@ -4690,26 +4713,6 @@ export default function App() {
     const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
     const [updatePrinterId, setUpdatePrinterId] = useState(null);
 
-    // Verificar se a URL contém hash para atualização de impressora
-    useEffect(() => {
-        const hash = window.location.hash;
-        if (hash.startsWith('#update-printer/')) {
-            const printerId = hash.replace('#update-printer/', '');
-            setUpdatePrinterId(printerId);
-        }
-    }, []);
-
-    // Se estiver no modo de atualização de impressora, mostrar apenas esse componente
-    if (updatePrinterId) {
-        return <UpdatePrinterInk 
-            printerId={updatePrinterId} 
-            onClose={() => {
-                setUpdatePrinterId(null);
-                window.location.hash = '';
-            }}
-        />;
-    }
-    
     useEffect(() => {
       // Configurar persistência de autenticação
       const setupAuth = async () => {
@@ -4799,6 +4802,28 @@ export default function App() {
         await signOut(auth);
         setPage('dashboard');
     };
+
+    // Verificar se a URL contém hash para atualização de impressora
+    useEffect(() => {
+        if (!authLoading) {
+            const hash = window.location.hash;
+            if (hash.startsWith('#update-printer/')) {
+                const printerId = hash.replace('#update-printer/', '');
+                setUpdatePrinterId(printerId);
+            }
+        }
+    }, [authLoading]);
+
+    // Se estiver no modo de atualização de impressora, mostrar apenas esse componente
+    if (updatePrinterId && !authLoading) {
+        return <UpdatePrinterInk 
+            printerId={updatePrinterId} 
+            onClose={() => {
+                setUpdatePrinterId(null);
+                window.location.hash = '';
+            }}
+        />;
+    }
 
     if (authLoading || userDataLoading) {
         return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><Spinner /></div>;
