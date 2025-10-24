@@ -4,7 +4,7 @@
     "privateKey": "-----BEGIN PRIVATE KEY-----\nSUA_CHAVE_PRIVADA_AQUI\n-----END PRIVATE KEY-----\n",
     "clientEmail": "firebase-adminsdk-xxxxx@seu-project-id.iam.gserviceaccount.com"
   },
-  "appId": "rotinas-ti-hpaes",
+  "appId": "rotinas-ti-app",
   "computerName": "PC da Recepção",
   "location": "Recepção",
   "checkInterval": 60000,

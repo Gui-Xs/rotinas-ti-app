@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import logoImage from './assets/hpaes.png';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
     getAuth, 
     onAuthStateChanged, 
@@ -1886,6 +1887,19 @@ const PrintersPage = () => {
     const [locationFilter, setLocationFilter] = useState('Todas');
     const [loading, setLoading] = useState(true);
     const [lastUpdate, setLastUpdate] = useState(new Date());
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [showQRCode, setShowQRCode] = useState(null);
+    const [newPrinter, setNewPrinter] = useState({
+        name: '',
+        location: '',
+        type: 'Laser',
+        ip_address: '',
+        cyan: 100,
+        magenta: 100,
+        yellow: 100,
+        black: 100,
+        manual: true
+    });
 
     // Monitoramento em tempo real das impressoras via Firebase
     useEffect(() => {
@@ -1959,6 +1973,64 @@ const PrintersPage = () => {
         }
     };
 
+    // Adicionar impressora manualmente
+    const handleAddPrinter = async () => {
+        if (!newPrinter.name || !newPrinter.location) {
+            alert('Por favor, preencha o nome e a localização da impressora.');
+            return;
+        }
+
+        try {
+            const printerData = {
+                ...newPrinter,
+                status: 'Online',
+                last_check: Timestamp.now(),
+                registered_at: Timestamp.now(),
+                registered_by: 'Manual'
+            };
+
+            const docRef = await addDoc(collection(db, `/artifacts/${appId}/printers`), printerData);
+            
+            // Mostrar QR Code após adicionar
+            setShowQRCode({
+                id: docRef.id,
+                name: newPrinter.name,
+                url: `${window.location.origin}/update-printer/${docRef.id}`
+            });
+
+            // Resetar formulário
+            setNewPrinter({
+                name: '',
+                location: '',
+                type: 'Laser',
+                ip_address: '',
+                cyan: 100,
+                magenta: 100,
+                yellow: 100,
+                black: 100,
+                manual: true
+            });
+
+            setIsAddModalOpen(false);
+        } catch (error) {
+            console.error('Erro ao adicionar impressora:', error);
+            alert('Erro ao adicionar impressora. Verifique o console para mais detalhes.');
+        }
+    };
+
+    // Atualizar níveis de tinta via QR Code
+    const handleUpdateInkLevels = async (printerId, inkLevels) => {
+        try {
+            const printerRef = doc(db, `/artifacts/${appId}/printers`, printerId);
+            await updateDoc(printerRef, {
+                ...inkLevels,
+                last_check: Timestamp.now()
+            });
+        } catch (error) {
+            console.error('Erro ao atualizar níveis de tinta:', error);
+        }
+    };
+
     // Filtrar impressoras
     const filteredPrinters = useMemo(() => {
         let filtered = printers;
@@ -2029,10 +2101,16 @@ const PrintersPage = () => {
                             Última atualização: {lastUpdate.toLocaleTimeString('pt-BR')}
                         </p>
                     </div>
-                    <Button onClick={handleManualRefresh} variant="secondary">
-                        <Activity className="w-5 h-5"/>
-                        Atualizar Agora
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button onClick={() => setIsAddModalOpen(true)} className="bg-blue-500 hover:bg-blue-600">
+                            <Plus className="w-5 h-5"/>
+                            Adicionar Impressora
+                        </Button>
+                        <Button onClick={handleManualRefresh} variant="secondary">
+                            <Activity className="w-5 h-5"/>
+                            Atualizar Agora
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Cards de Estatísticas */}
@@ -2418,6 +2496,148 @@ const PrintersPage = () => {
                     ) : null}
                 </div>
             </Card>
+
+            {/* Modal para Adicionar Impressora */}
+            <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Adicionar Impressora Manualmente" size="lg">
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Impressora *</label>
+                        <Input 
+                            value={newPrinter.name}
+                            onChange={e => setNewPrinter({...newPrinter, name: e.target.value})}
+                            placeholder="Ex: HP LaserJet Pro - Recepção"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Localização *</label>
+                        <Input 
+                            value={newPrinter.location}
+                            onChange={e => setNewPrinter({...newPrinter, location: e.target.value})}
+                            placeholder="Ex: Recepção, Sala 101"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                            <select 
+                                value={newPrinter.type}
+                                onChange={e => setNewPrinter({...newPrinter, type: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                                <option value="Laser">Laser</option>
+                                <option value="Jato de Tinta">Jato de Tinta</option>
+                                <option value="Multifuncional">Multifuncional</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Endereço IP (opcional)</label>
+                            <Input 
+                                value={newPrinter.ip_address}
+                                onChange={e => setNewPrinter({...newPrinter, ip_address: e.target.value})}
+                                placeholder="Ex: 192.168.1.100"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Níveis de Tinta Iniciais (%)</label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-gray-600 mb-1">Ciano</label>
+                                <Input 
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={newPrinter.cyan}
+                                    onChange={e => setNewPrinter({...newPrinter, cyan: parseInt(e.target.value) || 0})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-600 mb-1">Magenta</label>
+                                <Input 
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={newPrinter.magenta}
+                                    onChange={e => setNewPrinter({...newPrinter, magenta: parseInt(e.target.value) || 0})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-600 mb-1">Amarelo</label>
+                                <Input 
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={newPrinter.yellow}
+                                    onChange={e => setNewPrinter({...newPrinter, yellow: parseInt(e.target.value) || 0})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-600 mb-1">Preto</label>
+                                <Input 
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={newPrinter.black}
+                                    onChange={e => setNewPrinter({...newPrinter, black: parseInt(e.target.value) || 0})}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-4">
+                        <Button variant="secondary" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleAddPrinter}>
+                            <Plus className="w-5 h-5"/>
+                            Adicionar Impressora
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Modal de QR Code */}
+            <Modal isOpen={!!showQRCode} onClose={() => setShowQRCode(null)} title="QR Code Gerado" size="md">
+                {showQRCode && (
+                    <div className="space-y-4">
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <h3 className="font-semibold text-green-800">Impressora Adicionada com Sucesso!</h3>
+                                    <p className="text-sm text-green-700 mt-1">
+                                        {showQRCode.name} foi adicionada ao sistema.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="text-center">
+                            <p className="text-sm text-gray-600 mb-4">
+                                Escaneie este QR Code com seu celular para atualizar os níveis de tinta manualmente:
+                            </p>
+                            <div className="flex justify-center bg-white p-6 rounded-lg border-2 border-gray-200">
+                                <QRCodeSVG 
+                                    value={showQRCode.url}
+                                    size={200}
+                                    level="H"
+                                    includeMargin={true}
+                                />
+                            </div>
+                            <p className="text-xs text-gray-500 mt-4">
+                                Você também pode acessar: <br/>
+                                <code className="bg-gray-100 px-2 py-1 rounded text-xs">{showQRCode.url}</code>
+                            </p>
+                        </div>
+
+                        <div className="flex justify-end pt-4">
+                            <Button onClick={() => setShowQRCode(null)}>Fechar</Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };
