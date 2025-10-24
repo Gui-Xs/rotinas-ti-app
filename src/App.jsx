@@ -2011,7 +2011,7 @@ const PrintersPage = () => {
             setShowQRCode({
                 id: docRef.id,
                 name: newPrinter.name,
-                url: `${window.location.origin}/update-printer/${docRef.id}`
+                url: `${window.location.origin}${window.location.pathname}#update-printer/${docRef.id}`
             });
 
             // Resetar formulário
@@ -2333,7 +2333,7 @@ const PrintersPage = () => {
                                                         onClick={() => setShowQRCode({
                                                             id: printer.id,
                                                             name: printer.name,
-                                                            url: `${window.location.origin}/update-printer/${printer.id}`
+                                                            url: `${window.location.origin}${window.location.pathname}#update-printer/${printer.id}`
                                                         })} 
                                                         className="text-green-600 hover:text-green-800 transition-colors"
                                                         title="Ver QR Code"
@@ -4471,6 +4471,210 @@ const ActivityLogsPage = () => {
     );
 };
 
+// --- Componente de Atualização de Tinta via QR Code ---
+const UpdatePrinterInk = ({ printerId, onClose }) => {
+    const [printer, setPrinter] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [inkLevels, setInkLevels] = useState({
+        cyan: 100,
+        magenta: 100,
+        yellow: 100,
+        black: 100
+    });
+
+    useEffect(() => {
+        const loadPrinter = async () => {
+            try {
+                const printerRef = doc(db, `/artifacts/${appId}/printers`, printerId);
+                const printerDoc = await getDoc(printerRef);
+                
+                if (printerDoc.exists()) {
+                    const data = printerDoc.data();
+                    setPrinter({ id: printerDoc.id, ...data });
+                    
+                    // Carregar níveis atuais
+                    if (data.ink_levels) {
+                        const levels = {};
+                        data.ink_levels.forEach(ink => {
+                            levels[ink.color] = ink.level;
+                        });
+                        setInkLevels(levels);
+                    }
+                }
+                setLoading(false);
+            } catch (error) {
+                console.error('Erro ao carregar impressora:', error);
+                setLoading(false);
+            }
+        };
+
+        loadPrinter();
+    }, [printerId]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const avgInkLevel = Math.round((inkLevels.cyan + inkLevels.magenta + inkLevels.yellow + inkLevels.black) / 4);
+            
+            const printerRef = doc(db, `/artifacts/${appId}/printers`, printerId);
+            await updateDoc(printerRef, {
+                ink_level: avgInkLevel,
+                ink_levels: [
+                    { color: 'cyan', level: inkLevels.cyan },
+                    { color: 'magenta', level: inkLevels.magenta },
+                    { color: 'yellow', level: inkLevels.yellow },
+                    { color: 'black', level: inkLevels.black }
+                ],
+                last_check: Timestamp.now()
+            });
+
+            alert('Níveis de tinta atualizados com sucesso!');
+            if (onClose) onClose();
+        } catch (error) {
+            console.error('Erro ao atualizar níveis:', error);
+            alert('Erro ao atualizar. Tente novamente.');
+        }
+        setSaving(false);
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="text-center">
+                    <Spinner />
+                    <p className="mt-4 text-gray-600">Carregando impressora...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!printer) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <Card className="max-w-md">
+                    <div className="text-center py-8">
+                        <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-500" />
+                        <h2 className="text-xl font-bold text-gray-800 mb-2">Impressora não encontrada</h2>
+                        <p className="text-gray-600">O QR Code pode estar inválido ou a impressora foi removida.</p>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-50 p-4">
+            <div className="max-w-2xl mx-auto">
+                <Card>
+                    <div className="mb-6">
+                        <div className="flex items-center gap-3 mb-2">
+                            <Printer className="w-8 h-8 text-blue-600" />
+                            <h1 className="text-2xl font-bold text-gray-800">{printer.name}</h1>
+                        </div>
+                        <p className="text-gray-600">{printer.location}</p>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-lg font-semibold text-gray-800 mb-4">Atualizar Níveis de Tinta</h2>
+                            
+                            <div className="space-y-4">
+                                {/* Ciano */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                            <span className="w-4 h-4 bg-cyan-500 rounded"></span>
+                                            Ciano
+                                        </label>
+                                        <span className="text-lg font-bold text-cyan-600">{inkLevels.cyan}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={inkLevels.cyan}
+                                        onChange={e => setInkLevels({...inkLevels, cyan: parseInt(e.target.value)})}
+                                        className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                                    />
+                                </div>
+
+                                {/* Magenta */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                            <span className="w-4 h-4 bg-pink-500 rounded"></span>
+                                            Magenta
+                                        </label>
+                                        <span className="text-lg font-bold text-pink-600">{inkLevels.magenta}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={inkLevels.magenta}
+                                        onChange={e => setInkLevels({...inkLevels, magenta: parseInt(e.target.value)})}
+                                        className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                    />
+                                </div>
+
+                                {/* Amarelo */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                            <span className="w-4 h-4 bg-yellow-400 rounded"></span>
+                                            Amarelo
+                                        </label>
+                                        <span className="text-lg font-bold text-yellow-600">{inkLevels.yellow}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={inkLevels.yellow}
+                                        onChange={e => setInkLevels({...inkLevels, yellow: parseInt(e.target.value)})}
+                                        className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-yellow-400"
+                                    />
+                                </div>
+
+                                {/* Preto */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                            <span className="w-4 h-4 bg-gray-800 rounded"></span>
+                                            Preto
+                                        </label>
+                                        <span className="text-lg font-bold text-gray-800">{inkLevels.black}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={inkLevels.black}
+                                        onChange={e => setInkLevels({...inkLevels, black: parseInt(e.target.value)})}
+                                        className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-800"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-4">
+                            {onClose && (
+                                <Button variant="secondary" onClick={onClose} className="flex-1">
+                                    Cancelar
+                                </Button>
+                            )}
+                            <Button onClick={handleSave} disabled={saving} className="flex-1">
+                                {saving ? 'Salvando...' : 'Salvar Níveis'}
+                            </Button>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
 // --- Componente Principal da Aplicação ---
 export default function App() {
     const [user, setUser] = useState(null);
@@ -4484,6 +4688,27 @@ export default function App() {
     const [dataLoading, setDataLoading] = useState(true);
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(userData?.uid);
     const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+    const [updatePrinterId, setUpdatePrinterId] = useState(null);
+
+    // Verificar se a URL contém hash para atualização de impressora
+    useEffect(() => {
+        const hash = window.location.hash;
+        if (hash.startsWith('#update-printer/')) {
+            const printerId = hash.replace('#update-printer/', '');
+            setUpdatePrinterId(printerId);
+        }
+    }, []);
+
+    // Se estiver no modo de atualização de impressora, mostrar apenas esse componente
+    if (updatePrinterId) {
+        return <UpdatePrinterInk 
+            printerId={updatePrinterId} 
+            onClose={() => {
+                setUpdatePrinterId(null);
+                window.location.hash = '';
+            }}
+        />;
+    }
     
     useEffect(() => {
       // Configurar persistência de autenticação
