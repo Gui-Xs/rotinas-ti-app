@@ -1894,6 +1894,7 @@ const PrintersPage = () => {
         location: '',
         type: 'Laser',
         ip_address: '',
+        isColor: true,
         cyan: 100,
         magenta: 100,
         yellow: 100,
@@ -1984,25 +1985,37 @@ const PrintersPage = () => {
 
         try {
             // Calcular média dos níveis de tinta
-            const avgInkLevel = Math.round((newPrinter.cyan + newPrinter.magenta + newPrinter.yellow + newPrinter.black) / 4);
+            let avgInkLevel, inkLevelsArray;
+            
+            if (newPrinter.isColor) {
+                avgInkLevel = Math.round((newPrinter.cyan + newPrinter.magenta + newPrinter.yellow + newPrinter.black) / 4);
+                inkLevelsArray = [
+                    { color: 'cyan', level: newPrinter.cyan },
+                    { color: 'magenta', level: newPrinter.magenta },
+                    { color: 'yellow', level: newPrinter.yellow },
+                    { color: 'black', level: newPrinter.black }
+                ];
+            } else {
+                // Impressora monocromática - apenas preto
+                avgInkLevel = newPrinter.black;
+                inkLevelsArray = [
+                    { color: 'black', level: newPrinter.black }
+                ];
+            }
             
             const printerData = {
                 name: newPrinter.name,
                 location: newPrinter.location,
                 type: newPrinter.type,
                 ip_address: newPrinter.ip_address,
+                isColor: newPrinter.isColor,
                 status: 'Online',
                 manual: true,
                 last_check: Timestamp.now(),
                 registered_at: Timestamp.now(),
                 registered_by: 'Manual',
                 ink_level: avgInkLevel,
-                ink_levels: [
-                    { color: 'cyan', level: newPrinter.cyan },
-                    { color: 'magenta', level: newPrinter.magenta },
-                    { color: 'yellow', level: newPrinter.yellow },
-                    { color: 'black', level: newPrinter.black }
-                ]
+                ink_levels: inkLevelsArray
             };
 
             const docRef = await addDoc(collection(db, `/artifacts/${appId}/printers`), printerData);
@@ -2020,6 +2033,7 @@ const PrintersPage = () => {
                 location: '',
                 type: 'Laser',
                 ip_address: '',
+                isColor: true,
                 cyan: 100,
                 magenta: 100,
                 yellow: 100,
@@ -2572,38 +2586,66 @@ const PrintersPage = () => {
                     </div>
 
                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Impressão</label>
+                        <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    checked={newPrinter.isColor}
+                                    onChange={() => setNewPrinter({...newPrinter, isColor: true})}
+                                    className="w-4 h-4"
+                                />
+                                <span className="text-sm">Colorida (CMYK)</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    checked={!newPrinter.isColor}
+                                    onChange={() => setNewPrinter({...newPrinter, isColor: false})}
+                                    className="w-4 h-4"
+                                />
+                                <span className="text-sm">Monocromática (Preto)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Níveis de Tinta Iniciais (%)</label>
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs text-gray-600 mb-1">Ciano</label>
-                                <Input 
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={newPrinter.cyan}
-                                    onChange={e => setNewPrinter({...newPrinter, cyan: parseInt(e.target.value) || 0})}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-600 mb-1">Magenta</label>
-                                <Input 
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={newPrinter.magenta}
-                                    onChange={e => setNewPrinter({...newPrinter, magenta: parseInt(e.target.value) || 0})}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-600 mb-1">Amarelo</label>
-                                <Input 
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={newPrinter.yellow}
-                                    onChange={e => setNewPrinter({...newPrinter, yellow: parseInt(e.target.value) || 0})}
-                                />
-                            </div>
+                            {newPrinter.isColor && (
+                                <>
+                                    <div>
+                                        <label className="block text-xs text-gray-600 mb-1">Ciano</label>
+                                        <Input 
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            value={newPrinter.cyan}
+                                            onChange={e => setNewPrinter({...newPrinter, cyan: parseInt(e.target.value) || 0})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-600 mb-1">Magenta</label>
+                                        <Input 
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            value={newPrinter.magenta}
+                                            onChange={e => setNewPrinter({...newPrinter, magenta: parseInt(e.target.value) || 0})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-600 mb-1">Amarelo</label>
+                                        <Input 
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            value={newPrinter.yellow}
+                                            onChange={e => setNewPrinter({...newPrinter, yellow: parseInt(e.target.value) || 0})}
+                                        />
+                                    </div>
+                                </>
+                            )}
                             <div>
                                 <label className="block text-xs text-gray-600 mb-1">Preto</label>
                                 <Input 
@@ -4543,18 +4585,29 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
         
         setSaving(true);
         try {
-            const avgInkLevel = Math.round((inkLevels.cyan + inkLevels.magenta + inkLevels.yellow + inkLevels.black) / 4);
+            let avgInkLevel, inkLevelsArray;
+            
+            if (printer.isColor !== false) {
+                avgInkLevel = Math.round((inkLevels.cyan + inkLevels.magenta + inkLevels.yellow + inkLevels.black) / 4);
+                inkLevelsArray = [
+                    { color: 'cyan', level: inkLevels.cyan },
+                    { color: 'magenta', level: inkLevels.magenta },
+                    { color: 'yellow', level: inkLevels.yellow },
+                    { color: 'black', level: inkLevels.black }
+                ];
+            } else {
+                // Impressora monocromática
+                avgInkLevel = inkLevels.black;
+                inkLevelsArray = [
+                    { color: 'black', level: inkLevels.black }
+                ];
+            }
             
             // Usar o banco de dados separado
             const printerRef = doc(separateDb, `/artifacts/${appId}/printers`, printerId);
             await updateDoc(printerRef, {
                 ink_level: avgInkLevel,
-                ink_levels: [
-                    { color: 'cyan', level: inkLevels.cyan },
-                    { color: 'magenta', level: inkLevels.magenta },
-                    { color: 'yellow', level: inkLevels.yellow },
-                    { color: 'black', level: inkLevels.black }
-                ],
+                ink_levels: inkLevelsArray,
                 last_check: Timestamp.now()
             });
 
@@ -4616,62 +4669,66 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
                             <h2 className="text-lg font-semibold text-gray-800 mb-4">Atualizar Níveis de Tinta</h2>
                             
                             <div className="space-y-4">
-                                {/* Ciano */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                            <span className="w-4 h-4 bg-cyan-500 rounded"></span>
-                                            Ciano
-                                        </label>
-                                        <span className="text-lg font-bold text-cyan-600">{inkLevels.cyan}%</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        value={inkLevels.cyan}
-                                        onChange={e => setInkLevels({...inkLevels, cyan: parseInt(e.target.value)})}
-                                        className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                                    />
-                                </div>
+                                {printer.isColor !== false && (
+                                    <>
+                                        {/* Ciano */}
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                                    <span className="w-4 h-4 bg-cyan-500 rounded"></span>
+                                                    Ciano
+                                                </label>
+                                                <span className="text-lg font-bold text-cyan-600">{inkLevels.cyan}%</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                value={inkLevels.cyan}
+                                                onChange={e => setInkLevels({...inkLevels, cyan: parseInt(e.target.value)})}
+                                                className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                                            />
+                                        </div>
 
-                                {/* Magenta */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                            <span className="w-4 h-4 bg-pink-500 rounded"></span>
-                                            Magenta
-                                        </label>
-                                        <span className="text-lg font-bold text-pink-600">{inkLevels.magenta}%</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        value={inkLevels.magenta}
-                                        onChange={e => setInkLevels({...inkLevels, magenta: parseInt(e.target.value)})}
-                                        className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                    />
-                                </div>
+                                        {/* Magenta */}
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                                    <span className="w-4 h-4 bg-pink-500 rounded"></span>
+                                                    Magenta
+                                                </label>
+                                                <span className="text-lg font-bold text-pink-600">{inkLevels.magenta}%</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                value={inkLevels.magenta}
+                                                onChange={e => setInkLevels({...inkLevels, magenta: parseInt(e.target.value)})}
+                                                className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                            />
+                                        </div>
 
-                                {/* Amarelo */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                            <span className="w-4 h-4 bg-yellow-400 rounded"></span>
-                                            Amarelo
-                                        </label>
-                                        <span className="text-lg font-bold text-yellow-600">{inkLevels.yellow}%</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        value={inkLevels.yellow}
-                                        onChange={e => setInkLevels({...inkLevels, yellow: parseInt(e.target.value)})}
-                                        className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-yellow-400"
-                                    />
-                                </div>
+                                        {/* Amarelo */}
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                                    <span className="w-4 h-4 bg-yellow-400 rounded"></span>
+                                                    Amarelo
+                                                </label>
+                                                <span className="text-lg font-bold text-yellow-600">{inkLevels.yellow}%</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                value={inkLevels.yellow}
+                                                onChange={e => setInkLevels({...inkLevels, yellow: parseInt(e.target.value)})}
+                                                className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-yellow-400"
+                                            />
+                                        </div>
+                                    </>
+                                )}
 
                                 {/* Preto */}
                                 <div>
