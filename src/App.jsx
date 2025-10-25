@@ -3661,6 +3661,365 @@ Relatório gerado automaticamente em ${new Date().toLocaleString('pt-BR')}
     );
 };
 
+// --- Página de Equipamentos ---
+const EquipmentsPage = ({ userData }) => {
+    const [equipments, setEquipments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentEquipment, setCurrentEquipment] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [typeFilter, setTypeFilter] = useState('Todos');
+    const [formData, setFormData] = useState({
+        name: '',
+        type: 'Computador',
+        brand: '',
+        model: '',
+        serialNumber: '',
+        location: '',
+        assignedTo: '',
+        purchaseDate: '',
+        warrantyExpiry: '',
+        status: 'Ativo',
+        notes: ''
+    });
+
+    // Carregar equipamentos do Firebase
+    useEffect(() => {
+        const equipmentsRef = collection(db, `/artifacts/${appId}/equipments`);
+        const unsubscribe = onSnapshot(equipmentsRef, (snapshot) => {
+            const equipmentsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setEquipments(equipmentsData);
+            setLoading(false);
+        }, err => {
+            console.error("Erro ao carregar equipamentos:", err);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const openModalForNew = () => {
+        setCurrentEquipment(null);
+        setFormData({
+            name: '',
+            type: 'Computador',
+            brand: '',
+            model: '',
+            serialNumber: '',
+            location: '',
+            assignedTo: '',
+            purchaseDate: '',
+            warrantyExpiry: '',
+            status: 'Ativo',
+            notes: ''
+        });
+        setIsModalOpen(true);
+    };
+
+    const openModalForEdit = (equipment) => {
+        setCurrentEquipment(equipment);
+        setFormData({
+            name: equipment.name || '',
+            type: equipment.type || 'Computador',
+            brand: equipment.brand || '',
+            model: equipment.model || '',
+            serialNumber: equipment.serialNumber || '',
+            location: equipment.location || '',
+            assignedTo: equipment.assignedTo || '',
+            purchaseDate: equipment.purchaseDate || '',
+            warrantyExpiry: equipment.warrantyExpiry || '',
+            status: equipment.status || 'Ativo',
+            notes: equipment.notes || ''
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleSubmit = async () => {
+        if (!formData.name || !formData.type) {
+            alert('Nome e tipo são obrigatórios.');
+            return;
+        }
+
+        try {
+            const equipmentData = {
+                ...formData,
+                updatedAt: Timestamp.now(),
+                updatedBy: userData.nome
+            };
+
+            if (currentEquipment) {
+                // Editar
+                const equipmentRef = doc(db, `/artifacts/${appId}/equipments`, currentEquipment.id);
+                await updateDoc(equipmentRef, equipmentData);
+            } else {
+                // Criar novo
+                equipmentData.createdAt = Timestamp.now();
+                equipmentData.createdBy = userData.nome;
+                await addDoc(collection(db, `/artifacts/${appId}/equipments`), equipmentData);
+            }
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error('Erro ao salvar equipamento:', error);
+            alert('Erro ao salvar equipamento.');
+        }
+    };
+
+    const handleDelete = async (equipmentId, equipmentName) => {
+        if (!window.confirm(`Tem certeza que deseja excluir "${equipmentName}"?`)) {
+            return;
+        }
+
+        try {
+            await deleteDoc(doc(db, `/artifacts/${appId}/equipments`, equipmentId));
+        } catch (error) {
+            console.error('Erro ao excluir equipamento:', error);
+            alert('Erro ao excluir equipamento.');
+        }
+    };
+
+    // Filtrar equipamentos
+    const filteredEquipments = useMemo(() => {
+        let filtered = equipments;
+
+        if (typeFilter !== 'Todos') {
+            filtered = filtered.filter(e => e.type === typeFilter);
+        }
+
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(e =>
+                (e.name && e.name.toLowerCase().includes(term)) ||
+                (e.brand && e.brand.toLowerCase().includes(term)) ||
+                (e.model && e.model.toLowerCase().includes(term)) ||
+                (e.serialNumber && e.serialNumber.toLowerCase().includes(term)) ||
+                (e.assignedTo && e.assignedTo.toLowerCase().includes(term))
+            );
+        }
+
+        return filtered;
+    }, [equipments, typeFilter, searchTerm]);
+
+    const equipmentTypes = ['Todos', 'Computador', 'Notebook', 'Telefone', 'Monitor', 'Impressora', 'Roteador', 'Switch', 'Servidor', 'Outro'];
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Spinner />
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <div className="mb-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                    <h2 className="text-2xl font-bold text-gray-800">Equipamentos</h2>
+                    <Button onClick={openModalForNew}>
+                        <Plus className="w-5 h-5"/>
+                        Adicionar Equipamento
+                    </Button>
+                </div>
+
+                {/* Filtros */}
+                <Card>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder="Buscar por nome, marca, modelo, serial..."
+                                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg"
+                            />
+                        </div>
+                        <select
+                            value={typeFilter}
+                            onChange={e => setTypeFilter(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg"
+                        >
+                            {equipmentTypes.map(type => (
+                                <option key={type} value={type}>{type}</option>
+                            ))}
+                        </select>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Lista de Equipamentos */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredEquipments.map(equipment => (
+                    <Card key={equipment.id}>
+                        <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <Boxes className="w-5 h-5 text-blue-600" />
+                                <h3 className="font-bold text-gray-800">{equipment.name}</h3>
+                            </div>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                equipment.status === 'Ativo' ? 'bg-green-100 text-green-800' :
+                                equipment.status === 'Manutenção' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                            }`}>
+                                {equipment.status}
+                            </span>
+                        </div>
+                        
+                        <div className="space-y-2 text-sm text-gray-600 mb-4">
+                            <p><strong>Tipo:</strong> {equipment.type}</p>
+                            {equipment.brand && <p><strong>Marca:</strong> {equipment.brand}</p>}
+                            {equipment.model && <p><strong>Modelo:</strong> {equipment.model}</p>}
+                            {equipment.serialNumber && <p><strong>Serial:</strong> {equipment.serialNumber}</p>}
+                            {equipment.location && <p><strong>Local:</strong> {equipment.location}</p>}
+                            {equipment.assignedTo && <p><strong>Atribuído a:</strong> {equipment.assignedTo}</p>}
+                        </div>
+
+                        <div className="flex gap-2">
+                            <Button onClick={() => openModalForEdit(equipment)} variant="secondary" className="flex-1">
+                                <Edit className="w-4 h-4"/>
+                                Editar
+                            </Button>
+                            <Button onClick={() => handleDelete(equipment.id, equipment.name)} variant="secondary" className="text-red-600 hover:bg-red-50">
+                                <Trash2 className="w-4 h-4"/>
+                            </Button>
+                        </div>
+                    </Card>
+                ))}
+
+                {filteredEquipments.length === 0 && (
+                    <Card className="col-span-full">
+                        <p className="text-center text-gray-600 py-8">Nenhum equipamento encontrado.</p>
+                    </Card>
+                )}
+            </div>
+
+            {/* Modal de Adicionar/Editar */}
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentEquipment ? 'Editar Equipamento' : 'Adicionar Equipamento'} size="lg">
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Equipamento *</label>
+                            <Input
+                                value={formData.name}
+                                onChange={e => setFormData({...formData, name: e.target.value})}
+                                placeholder="Ex: Notebook Dell - João"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
+                            <select
+                                value={formData.type}
+                                onChange={e => setFormData({...formData, type: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                                {equipmentTypes.filter(t => t !== 'Todos').map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                            <select
+                                value={formData.status}
+                                onChange={e => setFormData({...formData, status: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                                <option value="Ativo">Ativo</option>
+                                <option value="Manutenção">Manutenção</option>
+                                <option value="Inativo">Inativo</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
+                            <Input
+                                value={formData.brand}
+                                onChange={e => setFormData({...formData, brand: e.target.value})}
+                                placeholder="Ex: Dell, HP, Cisco"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
+                            <Input
+                                value={formData.model}
+                                onChange={e => setFormData({...formData, model: e.target.value})}
+                                placeholder="Ex: Latitude 5420"
+                            />
+                        </div>
+
+                        <div className="col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Número de Série</label>
+                            <Input
+                                value={formData.serialNumber}
+                                onChange={e => setFormData({...formData, serialNumber: e.target.value})}
+                                placeholder="Ex: SN123456789"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Localização</label>
+                            <Input
+                                value={formData.location}
+                                onChange={e => setFormData({...formData, location: e.target.value})}
+                                placeholder="Ex: Sala 101, TI"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Atribuído a</label>
+                            <Input
+                                value={formData.assignedTo}
+                                onChange={e => setFormData({...formData, assignedTo: e.target.value})}
+                                placeholder="Ex: João Silva"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Data de Compra</label>
+                            <Input
+                                type="date"
+                                value={formData.purchaseDate}
+                                onChange={e => setFormData({...formData, purchaseDate: e.target.value})}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Vencimento da Garantia</label>
+                            <Input
+                                type="date"
+                                value={formData.warrantyExpiry}
+                                onChange={e => setFormData({...formData, warrantyExpiry: e.target.value})}
+                            />
+                        </div>
+
+                        <div className="col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                            <textarea
+                                value={formData.notes}
+                                onChange={e => setFormData({...formData, notes: e.target.value})}
+                                placeholder="Informações adicionais..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                rows="3"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-4">
+                        <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSubmit}>
+                            {currentEquipment ? 'Salvar Alterações' : 'Adicionar Equipamento'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+        </div>
+    );
+};
+
 // --- Página de Estoque ---
 const StockPage = ({ userData }) => {
     const [stockItems, setStockItems] = useState([]);
@@ -4916,6 +5275,8 @@ export default function App() {
                 return <HistoryPage executions={executions} routines={routines} />;
             case 'impressoras':
                 return <PrintersPage />;
+            case 'equipamentos':
+                return <EquipmentsPage userData={userData} />;
             case 'estoque':
                 return <StockPage userData={userData} />;
             case 'relatorios':
@@ -4936,6 +5297,7 @@ export default function App() {
         { name: 'Rotinas', icon: ClipboardList, page: 'rotinas' },
         { name: 'Histórico', icon: History, page: 'historico' },
         { name: 'Impressoras', icon: Printer, page: 'impressoras' },
+        { name: 'Equipamentos', icon: Boxes, page: 'equipamentos' },
         { name: 'Estoque', icon: Package, page: 'estoque' },
         { name: 'Relatórios', icon: BarChart3, page: 'relatorios' },
         { name: 'Relatórios Auto', icon: FileCheck, page: 'auto-reports' },
