@@ -4971,6 +4971,7 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
     const [separateApp, setSeparateApp] = useState(null);
     const [separateDb, setSeparateDb] = useState(null);
     const [separateAuth, setSeparateAuth] = useState(null);
+    const [separateStorage, setSeparateStorage] = useState(null);
     const [loggedInUser, setLoggedInUser] = useState(null);
     const [showLoginForm, setShowLoginForm] = useState(true);
     const [loginEmail, setLoginEmail] = useState('');
@@ -4990,10 +4991,12 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
                 const tempApp = initializeApp(firebaseConfig, 'updatePrinterApp-' + Date.now());
                 const tempAuth = getAuth(tempApp);
                 const tempDb = getFirestore(tempApp);
+                const tempStorage = getStorage(tempApp);
                 
                 setSeparateApp(tempApp);
                 setSeparateDb(tempDb);
                 setSeparateAuth(tempAuth);
+                setSeparateStorage(tempStorage);
                 
                 // Fazer login anônimo na instância separada apenas para carregar dados da impressora
                 console.log('Fazendo login anônimo em instância separada...');
@@ -5119,22 +5122,41 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
             let imageUrl = null;
             
             // Upload da imagem se houver
-            if (imageFile) {
+            if (imageFile && separateStorage) {
                 setUploading(true);
-                const storageRef = ref(storage, `printer-images/${printerId}/${Date.now()}_${imageFile.name}`);
-                const uploadTask = uploadBytesResumable(storageRef, imageFile);
-                
-                await new Promise((resolve, reject) => {
-                    uploadTask.on('state_changed',
-                        null,
-                        (error) => reject(error),
-                        async () => {
-                            imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
-                            resolve();
-                        }
-                    );
-                });
-                setUploading(false);
+                try {
+                    const storageRef = ref(separateStorage, `printer-images/${printerId}/${Date.now()}_${imageFile.name}`);
+                    const uploadTask = uploadBytesResumable(storageRef, imageFile);
+                    
+                    await new Promise((resolve, reject) => {
+                        uploadTask.on('state_changed',
+                            (snapshot) => {
+                                // Opcional: mostrar progresso
+                                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                                console.log('Upload progress:', progress + '%');
+                            },
+                            (error) => {
+                                console.error('Erro no upload:', error);
+                                reject(error);
+                            },
+                            async () => {
+                                try {
+                                    imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                                    console.log('Upload concluído, URL:', imageUrl);
+                                    resolve();
+                                } catch (error) {
+                                    console.error('Erro ao obter URL:', error);
+                                    reject(error);
+                                }
+                            }
+                        );
+                    });
+                } catch (uploadError) {
+                    console.error('Erro durante upload:', uploadError);
+                    alert('Erro ao fazer upload da imagem: ' + uploadError.message);
+                } finally {
+                    setUploading(false);
+                }
             }
             
             // Criar registro de atualização
