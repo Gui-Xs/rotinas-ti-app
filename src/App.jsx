@@ -1902,6 +1902,8 @@ const PrintersPage = () => {
         manual: true
     });
 
+    const [printerUpdates, setPrinterUpdates] = useState([]);
+
     // Monitoramento em tempo real das impressoras via Firebase
     useEffect(() => {
         const printersRef = collection(db, `/artifacts/${appId}/printers`);
@@ -1916,6 +1918,21 @@ const PrintersPage = () => {
         }, err => {
             console.error("Erro ao carregar impressoras:", err);
             setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Carregar histórico de atualizações de impressoras
+    useEffect(() => {
+        const updatesRef = collection(db, `/artifacts/${appId}/printerUpdates`);
+        const unsubscribe = onSnapshot(updatesRef, (snapshot) => {
+            const updatesData = snapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                ...doc.data() 
+            })).sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+            setPrinterUpdates(updatesData);
+        }, err => {
+            console.error("Erro ao carregar atualizações:", err);
         });
         return () => unsubscribe();
     }, []);
@@ -2368,7 +2385,7 @@ const PrintersPage = () => {
                                     {expandedPrinter === printer.id && (
                                         <tr className="bg-blue-50 border-b">
                                             <td colSpan="8" className="p-4">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                                     <div className="bg-white rounded-lg p-4 shadow-sm">
                                                         <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                                             <FileTextIcon className="w-4 h-4" />
@@ -2407,6 +2424,12 @@ const PrintersPage = () => {
                                                                 <span className="text-gray-600">Registrado por:</span>
                                                                 <span className="font-medium">{printer.registered_by}</span>
                                                             </div>
+                                                            {printer.last_updated_by && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-600">Última atualização por:</span>
+                                                                    <span className="font-medium">{printer.last_updated_by}</span>
+                                                                </div>
+                                                            )}
                                                             {printer.last_check && (
                                                                 <div className="flex justify-between">
                                                                     <span className="text-gray-600">Última verificação:</span>
@@ -2508,6 +2531,67 @@ const PrintersPage = () => {
                                                         </div>
                                                     ) : null}
                                                 </div>
+
+                                                {/* Histórico de Atualizações */}
+                                                {(() => {
+                                                    const updates = printerUpdates.filter(u => u.printerId === printer.id);
+                                                    if (updates.length > 0) {
+                                                        return (
+                                                            <div className="bg-white rounded-lg p-4 shadow-sm">
+                                                                <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                                                    <History className="w-4 h-4" />
+                                                                    Histórico de Atualizações ({updates.length})
+                                                                </h4>
+                                                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                                                    {updates.slice(0, 5).map((update) => (
+                                                                        <div key={update.id} className="border border-gray-200 rounded-lg p-3">
+                                                                            <div className="flex items-start justify-between mb-2">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <UserCheck className="w-4 h-4 text-blue-600" />
+                                                                                    <span className="text-sm font-semibold text-gray-800">{update.updatedBy}</span>
+                                                                                </div>
+                                                                                <span className="text-xs text-gray-500">
+                                                                                    {update.timestamp && (update.timestamp.toDate ? update.timestamp.toDate() : new Date(update.timestamp)).toLocaleString('pt-BR')}
+                                                                                </span>
+                                                                            </div>
+                                                                            
+                                                                            {update.observations && (
+                                                                                <div className="mb-2 p-2 bg-gray-50 rounded">
+                                                                                    <p className="text-xs text-gray-600 mb-1 font-semibold">Observações:</p>
+                                                                                    <p className="text-sm text-gray-700">{update.observations}</p>
+                                                                                </div>
+                                                                            )}
+                                                                            
+                                                                            {update.imageUrl && (
+                                                                                <div className="mb-2">
+                                                                                    <p className="text-xs text-gray-600 mb-1 font-semibold">Imagem anexada:</p>
+                                                                                    <img 
+                                                                                        src={update.imageUrl} 
+                                                                                        alt="Evidência" 
+                                                                                        className="w-full h-32 object-cover rounded border border-gray-300 cursor-pointer hover:opacity-90"
+                                                                                        onClick={() => window.open(update.imageUrl, '_blank')}
+                                                                                    />
+                                                                                </div>
+                                                                            )}
+                                                                            
+                                                                            <div className="flex gap-2 text-xs">
+                                                                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                                                                    Média: {update.avgInkLevel}%
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    {updates.length > 5 && (
+                                                                        <p className="text-xs text-gray-500 text-center pt-2">
+                                                                            Mostrando 5 de {updates.length} atualizações
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                             </td>
                                         </tr>
                                     )}
@@ -4886,6 +4970,16 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
     });
     const [separateApp, setSeparateApp] = useState(null);
     const [separateDb, setSeparateDb] = useState(null);
+    const [separateAuth, setSeparateAuth] = useState(null);
+    const [loggedInUser, setLoggedInUser] = useState(null);
+    const [showLoginForm, setShowLoginForm] = useState(true);
+    const [loginEmail, setLoginEmail] = useState('');
+    const [loginPassword, setLoginPassword] = useState('');
+    const [loginError, setLoginError] = useState('');
+    const [observations, setObservations] = useState('');
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
         const loadPrinter = async () => {
@@ -4899,8 +4993,9 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
                 
                 setSeparateApp(tempApp);
                 setSeparateDb(tempDb);
+                setSeparateAuth(tempAuth);
                 
-                // Fazer login anônimo na instância separada
+                // Fazer login anônimo na instância separada apenas para carregar dados da impressora
                 console.log('Fazendo login anônimo em instância separada...');
                 await signInAnonymously(tempAuth);
                 
@@ -4936,9 +5031,68 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
         loadPrinter();
     }, [printerId]);
 
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        setLoginError('');
+        
+        if (!loginEmail || !loginPassword) {
+            setLoginError('Por favor, preencha email e senha');
+            return;
+        }
+
+        try {
+            // Fazer logout do usuário anônimo primeiro
+            await signOut(separateAuth);
+            
+            // Fazer login com email e senha
+            const userCredential = await signInWithEmailAndPassword(separateAuth, loginEmail, loginPassword);
+            
+            // Buscar dados do usuário
+            const userDoc = await getDoc(doc(separateDb, `/artifacts/${appId}/users`, userCredential.user.uid));
+            
+            if (userDoc.exists()) {
+                setLoggedInUser({ uid: userCredential.user.uid, ...userDoc.data() });
+                setShowLoginForm(false);
+            } else {
+                setLoginError('Usuário não encontrado no sistema');
+                await signOut(separateAuth);
+            }
+        } catch (error) {
+            console.error('Erro ao fazer login:', error);
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+                setLoginError('Email ou senha incorretos');
+            } else if (error.code === 'auth/user-not-found') {
+                setLoginError('Usuário não encontrado');
+            } else if (error.code === 'auth/invalid-email') {
+                setLoginError('Email inválido');
+            } else {
+                setLoginError('Erro ao fazer login. Tente novamente.');
+            }
+        }
+    };
+
+    const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) { // 5MB
+                alert('A imagem deve ter no máximo 5MB');
+                return;
+            }
+            
+            setImageFile(file);
+            
+            // Criar preview
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setImagePreview(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
     const handleSave = async () => {
-        if (!separateDb) {
-            alert('Erro: Banco de dados não inicializado');
+        if (!separateDb || !loggedInUser) {
+            alert('Erro: Você precisa estar logado para atualizar');
             return;
         }
         
@@ -4962,12 +5116,53 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
                 ];
             }
             
-            // Usar o banco de dados separado
+            let imageUrl = null;
+            
+            // Upload da imagem se houver
+            if (imageFile) {
+                setUploading(true);
+                const storageRef = ref(storage, `printer-images/${printerId}/${Date.now()}_${imageFile.name}`);
+                const uploadTask = uploadBytesResumable(storageRef, imageFile);
+                
+                await new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        null,
+                        (error) => reject(error),
+                        async () => {
+                            imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                            resolve();
+                        }
+                    );
+                });
+                setUploading(false);
+            }
+            
+            // Criar registro de atualização
+            const updateRecord = {
+                printerId: printerId,
+                printerName: printer.name,
+                printerLocation: printer.location,
+                updatedBy: loggedInUser.nome,
+                updatedByEmail: loggedInUser.email,
+                updatedById: loggedInUser.uid,
+                inkLevels: inkLevelsArray,
+                avgInkLevel: avgInkLevel,
+                observations: observations || '',
+                imageUrl: imageUrl || null,
+                timestamp: Timestamp.now(),
+                createdAt: new Date().toISOString()
+            };
+            
+            // Salvar registro de atualização
+            await addDoc(collection(separateDb, `/artifacts/${appId}/printerUpdates`), updateRecord);
+            
+            // Atualizar impressora
             const printerRef = doc(separateDb, `/artifacts/${appId}/printers`, printerId);
             await updateDoc(printerRef, {
                 ink_level: avgInkLevel,
                 ink_levels: inkLevelsArray,
-                last_check: Timestamp.now()
+                last_check: Timestamp.now(),
+                last_updated_by: loggedInUser.nome
             });
 
             alert('Níveis de tinta atualizados com sucesso!');
@@ -4977,6 +5172,7 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
             alert('Erro ao atualizar. Tente novamente.');
         }
         setSaving(false);
+        setUploading(false);
     };
 
     if (loading) {
@@ -5011,16 +5207,95 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
         );
     }
 
+    // Tela de login
+    if (showLoginForm) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <Card className="max-w-md w-full">
+                    <div className="text-center mb-6">
+                        <Lock className="w-16 h-16 mx-auto mb-4 text-blue-600" />
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">Login Necessário</h2>
+                        <p className="text-gray-600">
+                            Para ajustar os níveis de tinta, faça login com sua conta
+                        </p>
+                    </div>
+
+                    {printer && (
+                        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <Printer className="w-6 h-6 text-blue-600" />
+                                <div>
+                                    <p className="font-semibold text-gray-800">{printer.name}</p>
+                                    <p className="text-sm text-gray-600">{printer.location}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <Input
+                                type="email"
+                                value={loginEmail}
+                                onChange={e => setLoginEmail(e.target.value)}
+                                placeholder="seu@email.com"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                            <Input
+                                type="password"
+                                value={loginPassword}
+                                onChange={e => setLoginPassword(e.target.value)}
+                                placeholder="••••••••"
+                                required
+                            />
+                        </div>
+
+                        {loginError && (
+                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                                <AlertCircle className="w-5 h-5 text-red-600" />
+                                <p className="text-sm text-red-600">{loginError}</p>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 pt-4">
+                            {onClose && (
+                                <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
+                                    Cancelar
+                                </Button>
+                            )}
+                            <Button type="submit" className="flex-1">
+                                Entrar
+                            </Button>
+                        </div>
+                    </form>
+                </Card>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 p-4">
             <div className="max-w-2xl mx-auto">
                 <Card>
                     <div className="mb-6">
-                        <div className="flex items-center gap-3 mb-2">
-                            <Printer className="w-8 h-8 text-blue-600" />
-                            <h1 className="text-2xl font-bold text-gray-800">{printer.name}</h1>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <Printer className="w-8 h-8 text-blue-600" />
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">{printer.name}</h1>
+                                    <p className="text-gray-600">{printer.location}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm text-gray-600">Logado como:</p>
+                                <p className="font-semibold text-gray-800">{loggedInUser?.nome}</p>
+                            </div>
                         </div>
-                        <p className="text-gray-600">{printer.location}</p>
                     </div>
 
                     <div className="space-y-6">
@@ -5110,14 +5385,64 @@ const UpdatePrinterInk = ({ printerId, onClose }) => {
                             </div>
                         </div>
 
-                        <div className="flex gap-3 pt-4">
+                        {/* Observações */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                                <FileText className="w-4 h-4" />
+                                Observações sobre a Impressora
+                            </label>
+                            <textarea
+                                value={observations}
+                                onChange={e => setObservations(e.target.value)}
+                                rows="4"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Ex: Toner ciano próximo do fim, papel atolando frequentemente, necessita manutenção..."
+                            />
+                        </div>
+
+                        {/* Upload de Imagem */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                                <Camera className="w-4 h-4" />
+                                Anexar Imagem (opcional)
+                            </label>
+                            <div className="space-y-3">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageChange}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                />
+                                {imagePreview && (
+                                    <div className="relative">
+                                        <img
+                                            src={imagePreview}
+                                            alt="Preview"
+                                            className="w-full h-48 object-cover rounded-lg border border-gray-300"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setImageFile(null);
+                                                setImagePreview(null);
+                                            }}
+                                            className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-4 border-t">
                             {onClose && (
                                 <Button variant="secondary" onClick={onClose} className="flex-1">
                                     Cancelar
                                 </Button>
                             )}
-                            <Button onClick={handleSave} disabled={saving} className="flex-1">
-                                {saving ? 'Salvando...' : 'Salvar Níveis'}
+                            <Button onClick={handleSave} disabled={saving || uploading} className="flex-1">
+                                {uploading ? 'Enviando imagem...' : saving ? 'Salvando...' : 'Salvar Atualização'}
                             </Button>
                         </div>
                     </div>
