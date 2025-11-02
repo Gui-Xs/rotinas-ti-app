@@ -1899,10 +1899,17 @@ const PrintersPage = () => {
         magenta: 100,
         yellow: 100,
         black: 100,
-        manual: true
+        manual: true,
+        autoDeplete: false,
+        depleteRateCyan: 3,
+        depleteRateMagenta: 3,
+        depleteRateYellow: 3,
+        depleteRateBlack: 3
     });
 
     const [printerUpdates, setPrinterUpdates] = useState([]);
+    const [editingPrinter, setEditingPrinter] = useState(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
     // Monitoramento em tempo real das impressoras via Firebase
     useEffect(() => {
@@ -1936,6 +1943,100 @@ const PrintersPage = () => {
         });
         return () => unsubscribe();
     }, []);
+
+    // Sistema de Depleção Automática de Tinta
+    useEffect(() => {
+        const runAutoDepleteCheck = async () => {
+            const now = new Date();
+            const today = now.toDateString();
+            
+            // Verificar se já rodou hoje
+            const lastRun = localStorage.getItem('lastAutoDepleteRun');
+            if (lastRun === today) {
+                return; // Já executou hoje
+            }
+
+            console.log('Executando depleção automática de tinta...');
+            
+            for (const printer of printers) {
+                if (!printer.autoDeplete) continue; // Pular impressoras sem depleção automática
+                
+                try {
+                    const printerRef = doc(db, `/artifacts/${appId}/printers`, printer.id);
+                    const printerDoc = await getDoc(printerRef);
+                    
+                    if (!printerDoc.exists()) continue;
+                    
+                    const data = printerDoc.data();
+                    const lastDeplete = data.lastAutoDeplete ? 
+                        (data.lastAutoDeplete.toDate ? data.lastAutoDeplete.toDate() : new Date(data.lastAutoDeplete)) : 
+                        null;
+                    
+                    // Verificar se já foi depletado hoje
+                    if (lastDeplete && lastDeplete.toDateString() === today) {
+                        continue;
+                    }
+                    
+                    // Calcular novos níveis
+                    const updatedInkLevels = data.ink_levels?.map(ink => {
+                        let depleteRate = 3; // Taxa padrão
+                        
+                        // Obter taxa específica por cor
+                        if (ink.color === 'cyan') depleteRate = data.depleteRateCyan || 3;
+                        else if (ink.color === 'magenta') depleteRate = data.depleteRateMagenta || 3;
+                        else if (ink.color === 'yellow') depleteRate = data.depleteRateYellow || 3;
+                        else if (ink.color === 'black') depleteRate = data.depleteRateBlack || 3;
+                        
+                        const newLevel = Math.max(0, ink.level - depleteRate);
+                        return { ...ink, level: newLevel };
+                    }) || [];
+                    
+                    // Calcular nova média
+                    const avgInkLevel = updatedInkLevels.length > 0 
+                        ? Math.round(updatedInkLevels.reduce((sum, ink) => sum + ink.level, 0) / updatedInkLevels.length)
+                        : 0;
+                    
+                    // Atualizar no Firebase
+                    await updateDoc(printerRef, {
+                        ink_levels: updatedInkLevels,
+                        ink_level: avgInkLevel,
+                        lastAutoDeplete: Timestamp.now(),
+                        last_check: Timestamp.now()
+                    });
+                    
+                    // Registrar no histórico
+                    await addDoc(collection(db, `/artifacts/${appId}/printerUpdates`), {
+                        printerId: printer.id,
+                        printerName: printer.name,
+                        updatedBy: 'Sistema Automático',
+                        updateType: 'auto_deplete',
+                        avgInkLevel: avgInkLevel,
+                        inkLevels: updatedInkLevels,
+                        observations: `Depleção automática aplicada. Taxas: ${updatedInkLevels.map(ink => `${ink.color}: -${
+                            ink.color === 'cyan' ? data.depleteRateCyan || 3 :
+                            ink.color === 'magenta' ? data.depleteRateMagenta || 3 :
+                            ink.color === 'yellow' ? data.depleteRateYellow || 3 :
+                            data.depleteRateBlack || 3
+                        }%`).join(', ')}`,
+                        timestamp: Timestamp.now()
+                    });
+                    
+                    console.log(`Depleção automática aplicada para ${printer.name}`);
+                } catch (error) {
+                    console.error(`Erro ao aplicar depleção automática para ${printer.name}:`, error);
+                }
+            }
+            
+            // Marcar como executado hoje
+            localStorage.setItem('lastAutoDepleteRun', today);
+        };
+
+        // Executar verificação ao carregar e a cada hora
+        runAutoDepleteCheck();
+        const interval = setInterval(runAutoDepleteCheck, 60 * 60 * 1000); // A cada 1 hora
+        
+        return () => clearInterval(interval);
+    }, [printers]);
 
     // Verificar se impressora está offline (última verificação > 5 minutos)
     const isOffline = (printer) => {
@@ -2032,7 +2133,13 @@ const PrintersPage = () => {
                 registered_at: Timestamp.now(),
                 registered_by: 'Manual',
                 ink_level: avgInkLevel,
-                ink_levels: inkLevelsArray
+                ink_levels: inkLevelsArray,
+                autoDeplete: newPrinter.autoDeplete,
+                depleteRateCyan: newPrinter.depleteRateCyan,
+                depleteRateMagenta: newPrinter.depleteRateMagenta,
+                depleteRateYellow: newPrinter.depleteRateYellow,
+                depleteRateBlack: newPrinter.depleteRateBlack,
+                lastAutoDeplete: null
             };
 
             const docRef = await addDoc(collection(db, `/artifacts/${appId}/printers`), printerData);
@@ -2055,7 +2162,12 @@ const PrintersPage = () => {
                 magenta: 100,
                 yellow: 100,
                 black: 100,
-                manual: true
+                manual: true,
+                autoDeplete: false,
+                depleteRateCyan: 3,
+                depleteRateMagenta: 3,
+                depleteRateYellow: 3,
+                depleteRateBlack: 3
             });
 
             setIsAddModalOpen(false);
@@ -2075,6 +2187,55 @@ const PrintersPage = () => {
             });
         } catch (error) {
             console.error('Erro ao atualizar níveis de tinta:', error);
+        }
+    };
+
+    // Abrir modal de edição
+    const handleEditPrinter = (printer) => {
+        setEditingPrinter({
+            id: printer.id,
+            name: printer.name,
+            location: printer.location,
+            type: printer.type || 'Laser',
+            ip_address: printer.ip_address || '',
+            isColor: printer.isColor !== undefined ? printer.isColor : true,
+            autoDeplete: printer.autoDeplete || false,
+            depleteRateCyan: printer.depleteRateCyan || 3,
+            depleteRateMagenta: printer.depleteRateMagenta || 3,
+            depleteRateYellow: printer.depleteRateYellow || 3,
+            depleteRateBlack: printer.depleteRateBlack || 3
+        });
+        setIsEditModalOpen(true);
+    };
+
+    // Salvar edição da impressora
+    const handleSaveEditPrinter = async () => {
+        if (!editingPrinter.name || !editingPrinter.location) {
+            alert('Por favor, preencha o nome e a localização da impressora.');
+            return;
+        }
+
+        try {
+            const printerRef = doc(db, `/artifacts/${appId}/printers`, editingPrinter.id);
+            await updateDoc(printerRef, {
+                name: editingPrinter.name,
+                location: editingPrinter.location,
+                type: editingPrinter.type,
+                ip_address: editingPrinter.ip_address,
+                isColor: editingPrinter.isColor,
+                autoDeplete: editingPrinter.autoDeplete,
+                depleteRateCyan: editingPrinter.depleteRateCyan,
+                depleteRateMagenta: editingPrinter.depleteRateMagenta,
+                depleteRateYellow: editingPrinter.depleteRateYellow,
+                depleteRateBlack: editingPrinter.depleteRateBlack,
+                last_check: Timestamp.now()
+            });
+
+            setIsEditModalOpen(false);
+            setEditingPrinter(null);
+        } catch (error) {
+            console.error('Erro ao editar impressora:', error);
+            alert('Erro ao editar impressora. Verifique o console para mais detalhes.');
         }
     };
 
@@ -2306,6 +2467,12 @@ const PrintersPage = () => {
                                             <div className="flex items-center gap-2">
                                                 <Printer className="w-4 h-4 text-gray-400" />
                                                 <span className="font-medium text-gray-800">{printer.name}</span>
+                                                {printer.autoDeplete && (
+                                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-semibold flex items-center gap-1" title="Depleção automática ativada">
+                                                        <Activity className="w-3 h-3" />
+                                                        Auto
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-3">
@@ -2358,6 +2525,13 @@ const PrintersPage = () => {
                                                     title="Ver detalhes"
                                                 >
                                                     <ChevronDown className={`w-5 h-5 transition-transform ${expandedPrinter === printer.id ? 'rotate-180' : ''}`}/>
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleEditPrinter(printer)} 
+                                                    className="text-purple-600 hover:text-purple-800 transition-colors"
+                                                    title="Editar configurações"
+                                                >
+                                                    <Edit className="w-5 h-5"/>
                                                 </button>
                                                 {printer.manual && (
                                                     <button 
@@ -2743,6 +2917,97 @@ const PrintersPage = () => {
                         </div>
                     </div>
 
+                    {/* Seção de Depleção Automática */}
+                    <div className="border-t pt-4">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                            <div className="flex items-start gap-3">
+                                <Activity className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <h4 className="font-semibold text-blue-800 mb-1">Depleção Automática de Tinta</h4>
+                                    <p className="text-xs text-blue-700">
+                                        Configure taxas de consumo diário para simular o uso real da impressora. 
+                                        O sistema reduzirá automaticamente os níveis de tinta a cada dia.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={newPrinter.autoDeplete}
+                                    onChange={e => setNewPrinter({...newPrinter, autoDeplete: e.target.checked})}
+                                    className="w-4 h-4 text-blue-600"
+                                />
+                                <span className="text-sm font-medium text-gray-700">
+                                    Ativar depleção automática de tinta
+                                </span>
+                            </label>
+                        </div>
+
+                        {newPrinter.autoDeplete && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Taxa de Consumo Diário (% por dia)
+                                </label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {newPrinter.isColor && (
+                                        <>
+                                            <div>
+                                                <label className="block text-xs text-gray-600 mb-1">🔵 Ciano</label>
+                                                <Input 
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    step="0.5"
+                                                    value={newPrinter.depleteRateCyan}
+                                                    onChange={e => setNewPrinter({...newPrinter, depleteRateCyan: parseFloat(e.target.value) || 0})}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-600 mb-1">🔴 Magenta</label>
+                                                <Input 
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    step="0.5"
+                                                    value={newPrinter.depleteRateMagenta}
+                                                    onChange={e => setNewPrinter({...newPrinter, depleteRateMagenta: parseFloat(e.target.value) || 0})}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-600 mb-1">🟡 Amarelo</label>
+                                                <Input 
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    step="0.5"
+                                                    value={newPrinter.depleteRateYellow}
+                                                    onChange={e => setNewPrinter({...newPrinter, depleteRateYellow: parseFloat(e.target.value) || 0})}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                    <div>
+                                        <label className="block text-xs text-gray-600 mb-1">⚫ Preto</label>
+                                        <Input 
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="0.5"
+                                            value={newPrinter.depleteRateBlack}
+                                            onChange={e => setNewPrinter({...newPrinter, depleteRateBlack: parseFloat(e.target.value) || 0})}
+                                        />
+                                    </div>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">
+                                    💡 Exemplo: 3% por dia significa que a tinta diminuirá 3% a cada 24 horas automaticamente.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="flex justify-end gap-2 pt-4">
                         <Button variant="secondary" onClick={() => setIsAddModalOpen(false)}>Cancelar</Button>
                         <Button onClick={handleAddPrinter}>
@@ -2789,6 +3054,154 @@ const PrintersPage = () => {
 
                         <div className="flex justify-end pt-4">
                             <Button onClick={() => setShowQRCode(null)}>Fechar</Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Modal de Edição de Impressora */}
+            <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); setEditingPrinter(null); }} title="Editar Configurações da Impressora" size="lg">
+                {editingPrinter && (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Impressora *</label>
+                            <Input 
+                                value={editingPrinter.name}
+                                onChange={e => setEditingPrinter({...editingPrinter, name: e.target.value})}
+                                placeholder="Ex: HP LaserJet Pro - Recepção"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Localização *</label>
+                            <Input 
+                                value={editingPrinter.location}
+                                onChange={e => setEditingPrinter({...editingPrinter, location: e.target.value})}
+                                placeholder="Ex: Recepção, Sala 101"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                                <select 
+                                    value={editingPrinter.type}
+                                    onChange={e => setEditingPrinter({...editingPrinter, type: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                >
+                                    <option value="Laser">Laser</option>
+                                    <option value="Jato de Tinta">Jato de Tinta</option>
+                                    <option value="Multifuncional">Multifuncional</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Endereço IP (opcional)</label>
+                                <Input 
+                                    value={editingPrinter.ip_address}
+                                    onChange={e => setEditingPrinter({...editingPrinter, ip_address: e.target.value})}
+                                    placeholder="Ex: 192.168.1.100"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Seção de Depleção Automática */}
+                        <div className="border-t pt-4">
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                <div className="flex items-start gap-3">
+                                    <Activity className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <h4 className="font-semibold text-blue-800 mb-1">Depleção Automática de Tinta</h4>
+                                        <p className="text-xs text-blue-700">
+                                            Configure taxas de consumo diário para simular o uso real da impressora. 
+                                            O sistema reduzirá automaticamente os níveis de tinta a cada dia.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={editingPrinter.autoDeplete}
+                                        onChange={e => setEditingPrinter({...editingPrinter, autoDeplete: e.target.checked})}
+                                        className="w-4 h-4 text-blue-600"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700">
+                                        Ativar depleção automática de tinta
+                                    </span>
+                                </label>
+                            </div>
+
+                            {editingPrinter.autoDeplete && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Taxa de Consumo Diário (% por dia)
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {editingPrinter.isColor && (
+                                            <>
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">🔵 Ciano</label>
+                                                    <Input 
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        step="0.5"
+                                                        value={editingPrinter.depleteRateCyan}
+                                                        onChange={e => setEditingPrinter({...editingPrinter, depleteRateCyan: parseFloat(e.target.value) || 0})}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">🔴 Magenta</label>
+                                                    <Input 
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        step="0.5"
+                                                        value={editingPrinter.depleteRateMagenta}
+                                                        onChange={e => setEditingPrinter({...editingPrinter, depleteRateMagenta: parseFloat(e.target.value) || 0})}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">🟡 Amarelo</label>
+                                                    <Input 
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        step="0.5"
+                                                        value={editingPrinter.depleteRateYellow}
+                                                        onChange={e => setEditingPrinter({...editingPrinter, depleteRateYellow: parseFloat(e.target.value) || 0})}
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+                                        <div>
+                                            <label className="block text-xs text-gray-600 mb-1">⚫ Preto</label>
+                                            <Input 
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                step="0.5"
+                                                value={editingPrinter.depleteRateBlack}
+                                                onChange={e => setEditingPrinter({...editingPrinter, depleteRateBlack: parseFloat(e.target.value) || 0})}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        💡 Exemplo: 3% por dia significa que a tinta diminuirá 3% a cada 24 horas automaticamente.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-4">
+                            <Button variant="secondary" onClick={() => { setIsEditModalOpen(false); setEditingPrinter(null); }}>Cancelar</Button>
+                            <Button onClick={handleSaveEditPrinter}>
+                                <Edit className="w-5 h-5"/>
+                                Salvar Alterações
+                            </Button>
                         </div>
                     </div>
                 )}
