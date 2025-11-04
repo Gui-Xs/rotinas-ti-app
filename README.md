@@ -11,6 +11,7 @@ Sistema de gerenciamento de rotinas de TI desenvolvido com React, Firebase e Tai
 - 📸 **Evidências Fotográficas**: Upload de fotos como comprovação de execução
 - 📊 **Histórico Completo**: Registro detalhado de todas as execuções com filtros avançados
 - 🖨️ **Monitoramento de Impressoras**: Sistema automático de detecção e monitoramento de impressoras USB e de rede em tempo real
+- 🤖 **Bot do Telegram**: Gerenciamento de rotinas e notificações via Telegram
 - 👥 **Gestão de Usuários**: Sistema de permissões (Admin/Técnico/Estagiário)
 - 🔐 **Autenticação Segura**: Login com Firebase Authentication
 - 📱 **Design Responsivo**: Interface adaptada para desktop e mobile
@@ -229,6 +230,50 @@ npm start
 - 🚀 **[agent/QUICK_START.md](./agent/QUICK_START.md)** - Guia rápido de início
 - 📋 **[agent/README.md](./agent/README.md)** - Documentação do agente
 - ✅ **[IMPLEMENTACAO_COMPLETA.md](./IMPLEMENTACAO_COMPLETA.md)** - Resumo da implementação
+
+## 🤖 Bot do Telegram
+
+O sistema inclui um **bot do Telegram** para gerenciamento remoto de rotinas.
+
+### Recursos
+
+- 📋 **Gerenciamento de Rotinas**: Visualizar, executar e acompanhar rotinas
+- 🔔 **Notificações Automáticas**: Lembretes de rotinas pendentes
+- 📊 **Relatórios em Tempo Real**: Status do dia e progresso
+- 🖨️ **Monitoramento de Impressoras**: Alertas de impressoras offline ou tinta baixa
+- 👥 **Multi-usuário**: Cada técnico pode se registrar e usar o bot
+
+### Início Rápido
+
+```bash
+# Navegar até a pasta do bot
+cd telegram-bot
+
+# Instalar dependências
+npm install
+
+# Configurar (interativo)
+npm run setup
+
+# Iniciar bot
+npm start
+```
+
+### Comandos Disponíveis
+
+- `/start` - Iniciar e ver comandos
+- `/registrar` - Vincular sua conta
+- `/pendentes` - Ver rotinas pendentes
+- `/executar` - Marcar rotina como feita
+- `/status` - Ver progresso do dia
+- `/impressoras` - Status das impressoras
+- `/alertas` - Ver alertas ativos
+
+### Documentação Completa
+
+- 📖 **[TELEGRAM_INTEGRATION.md](./TELEGRAM_INTEGRATION.md)** - Documentação completa da integração
+- 🚀 **[telegram-bot/QUICK_START.md](./telegram-bot/QUICK_START.md)** - Guia rápido de início
+- 📋 **[telegram-bot/README.md](./telegram-bot/README.md)** - Documentação do bot
 
 ## 🌐 Deploy no GitHub Pages
 

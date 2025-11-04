@@ -3223,7 +3223,8 @@ const AdminPage = ({ routines, users }) => {
         responsavel: '',
         instrucoes: '',
         checklist: [],
-        assignedTechnicians: []
+        assignedTechnicians: [],
+        dataEspecifica: ''
     });
     const [checklistInput, setChecklistInput] = useState('');
 
@@ -3238,7 +3239,8 @@ const AdminPage = ({ routines, users }) => {
             responsavel: '',
             instrucoes: '',
             checklist: [],
-            assignedTechnicians: []
+            assignedTechnicians: [],
+            dataEspecifica: ''
         });
         setChecklistInput('');
         setIsModalOpen(true);
@@ -3255,7 +3257,8 @@ const AdminPage = ({ routines, users }) => {
             responsavel: routine.responsavel || '',
             instrucoes: routine.instrucoes || '',
             checklist: routine.checklist || [],
-            assignedTechnicians: routine.assignedTechnicians || []
+            assignedTechnicians: routine.assignedTechnicians || [],
+            dataEspecifica: routine.dataEspecifica || ''
         });
         setChecklistInput('');
         setIsModalOpen(true);
@@ -3486,6 +3489,7 @@ const AdminPage = ({ routines, users }) => {
                                 <option value="diaria">Diária</option>
                                 <option value="semanal">Semanal</option>
                                 <option value="mensal">Mensal</option>
+                                <option value="agendada">Agendada (Data Específica)</option>
                             </select>
                         </div>
                         <div>
@@ -3501,6 +3505,26 @@ const AdminPage = ({ routines, users }) => {
                             <Input name="responsavel" value={formState.responsavel} onChange={handleFormChange} placeholder="Nome do responsável" />
                         </div>
                     </div>
+
+                    {formState.frequencia === 'agendada' && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                                <Calendar className="w-4 h-4" />
+                                Data Específica *
+                            </label>
+                            <Input 
+                                type="date" 
+                                name="dataEspecifica" 
+                                value={formState.dataEspecifica} 
+                                onChange={handleFormChange}
+                                min={new Date().toISOString().split('T')[0]}
+                                className="w-full"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Esta rotina será executada apenas na data selecionada
+                            </p>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Instruções Específicas</label>

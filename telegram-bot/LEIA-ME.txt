@@ -1,0 +1,127 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║                   🤖 BOT DO TELEGRAM - ROTINAS TI                           ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+📖 LEIA ISTO PRIMEIRO!
+═══════════════════════════════════════════════════════════════════════════════
+
+Este é o Bot do Telegram para o sistema de Rotinas TI HPAES.
+
+Com ele você pode:
+  ✓ Gerenciar rotinas pelo Telegram
+  ✓ Receber notificações automáticas
+  ✓ Monitorar impressoras
+  ✓ Ver progresso do dia
+  ✓ Executar rotinas remotamente
+
+
+🚀 INSTALAÇÃO RÁPIDA
+═══════════════════════════════════════════════════════════════════════════════
+
+WINDOWS:
+  1. Duplo clique em: INSTALAR.bat
+  2. Aguarde instalação
+  3. Duplo clique em: INICIAR.bat
+
+LINUX/MAC:
+  1. npm install
+  2. npm run setup
+  3. npm start
+
+
+📚 DOCUMENTAÇÃO
+═══════════════════════════════════════════════════════════════════════════════
+
+Escolha o guia adequado para você:
+
+👤 USUÁRIO FINAL (Técnico/Estagiário)
+   → Leia: QUICK_START.md
+   → Tempo: 5 minutos
+   → O que aprenderá: Como usar o bot no dia a dia
+
+👨‍💼 ADMINISTRADOR (Instalar e configurar)
+   → Leia: README.md
+   → Tempo: 15 minutos
+   → O que aprenderá: Instalação, configuração e manutenção
+
+💻 DESENVOLVEDOR (Entender o código)
+   → Leia: ../IMPLEMENTACAO_TELEGRAM.md
+   → Tempo: 30 minutos
+   → O que aprenderá: Arquitetura e funcionamento interno
+
+
+📋 ARQUIVOS IMPORTANTES
+═══════════════════════════════════════════════════════════════════════════════
+
+PARA COMEÇAR:
+  ✓ QUICK_START.md              - Guia rápido de 5 minutos
+  ✓ CHECKLIST_INSTALACAO.md     - Passo a passo detalhado
+  ✓ INSTALAR.bat                - Instalador Windows
+  ✓ INICIAR.bat                 - Iniciador Windows
+
+DOCUMENTAÇÃO:
+  ✓ README.md                   - Documentação completa
+  ✓ EXEMPLOS_USO.md             - Casos práticos de uso
+  ✓ ../TELEGRAM_INTEGRATION.md  - Integração completa
+
+CONFIGURAÇÃO:
+  ✓ .env.example                - Exemplo de configuração
+  ✓ setup.js                    - Configuração interativa
+
+CÓDIGO:
+  ✓ index.js                    - Bot principal
+  ✓ package.json                - Dependências
+
+
+❓ PERGUNTAS FREQUENTES
+═══════════════════════════════════════════════════════════════════════════════
+
+P: Preciso criar uma conta no Telegram?
+R: Sim, você precisa ter o Telegram instalado no celular ou computador.
+
+P: Como obtenho o token do bot?
+R: Procure @BotFather no Telegram e envie /newbot. Siga as instruções.
+
+P: Preciso das credenciais do Firebase?
+R: Sim, você precisa do Firebase Admin SDK. Veja README.md para detalhes.
+
+P: O bot funciona em grupos?
+R: Sim, você pode adicionar o bot a grupos do Telegram.
+
+P: Posso usar em vários computadores?
+R: Sim, mas rode apenas uma instância do bot por vez.
+
+P: Como atualizo o bot?
+R: Execute: git pull && npm install && reinicie o bot
+
+
+🆘 PRECISA DE AJUDA?
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Consulte a seção "Solução de Problemas" no README.md
+2. Verifique os logs do bot
+3. Leia a documentação completa
+4. Entre em contato com a equipe de TI
+
+
+🎯 PRÓXIMOS PASSOS
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ] 1. Leia QUICK_START.md ou README.md
+[ ] 2. Instale as dependências (npm install)
+[ ] 3. Configure o bot (npm run setup)
+[ ] 4. Inicie o bot (npm start)
+[ ] 5. Teste no Telegram (/start)
+[ ] 6. Registre-se (/registrar)
+[ ] 7. Use os comandos!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+                    Desenvolvido com ❤️ para HPAES TI
+                              03/11/2024
+
+═══════════════════════════════════════════════════════════════════════════════
